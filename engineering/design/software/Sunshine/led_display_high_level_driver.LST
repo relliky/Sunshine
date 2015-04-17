@@ -1,0 +1,277 @@
+C51 COMPILER V9.53.0.0   LED_DISPLAY_HIGH_LEVEL_DRIVER                                     09/24/2014 09:43:05 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE LED_DISPLAY_HIGH_LEVEL_DRIVER
+OBJECT MODULE PLACED IN led_display_high_level_driver.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE led_display_high_level_driver.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXT
+                    -END
+
+line level    source
+
+   1          #ifndef LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+   2                  #include <led_display_high_level_driver.h>
+   3                  #define LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+   4          #endif
+   5          
+   6          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+   7                  Description: Display Timer on LED screen with always on setting, mainly used in USER_INPUT_STATE_NORMAL_D
+             -ISPLAY
+   8                                           1. For any extra time greater than 0 min but less then 30 min period, time will be rounded up. 
+   9                                                  For example, 1:27:30 will be display as 1.5h, but 1:30:00 will also be displayed as 1.5h.
+  10                  Input:           unsigned int NumberOfSecondRadiatorOn_Local
+  11            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  12          void DisplayStaticTimer(unsigned int NumberOfSecondRadiatorOn_Local)
+  13          {
+  14   1              DisplayTimer(NumberOfSecondRadiatorOn_Local, LED_DIGIT_ON);
+  15   1      } // end of void DisplayStaticTimer (unsigned char NumberOfHalfAnHourRadiatorOn_Local)
+  16          
+  17          
+  18          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+  19                  Description: Display Timer on LED screen with blinking numbers, mainly used in USER_INPUT_STATE_SET_TIME
+  20                                           1. For any extra time greater than 0 min but less then 30 min period, time will be rounded up. 
+  21                                                  For example, 1:27:30 will be display as 1.5h, but 1:30:00 will also be displayed as 1.5h.
+  22                  Input:           unsigned int NumberOfSecondRadiatorOn_Local
+  23            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  24          void DisplayBlinkingTimer (unsigned int NumberOfSecondRadiatorOn_Local)
+  25          {
+  26   1              DisplayTimer(NumberOfSecondRadiatorOn_Local, LED_DIGIT_BLINK);
+  27   1      } // end of void DisplayBlinkingTimer (unsigned char NumberOfHalfAnHourRadiatorOn_Local)
+  28          
+  29          
+  30          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+  31                  Description: Display Timer on LED screen with blinking/always numbers, mainly used in USER_INPUT_STATE_SE
+             -T_TIME
+  32                                           1. For any extra time greater than 0 min but less then 30 min period, time will be rounded up. 
+  33                                                  For example, 1:27:30 will be display as 1.5h, but 1:30:00 will also be displayed as 1.5h.
+  34                  Input:           unsigned int NumberOfSecondRadiatorOn_Local
+  35                                           unsigned char BlinkOrStatic
+  36            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  37          void DisplayTimer(unsigned int NumberOfSecondRadiatorOn_Local, unsigned char BlinkOrStatic)
+  38          {
+  39   1              unsigned int  NumberOfHalfAnHourRadiatorOn_Local;
+  40   1              unsigned char Tens;
+  41   1              unsigned char Units;
+  42   1              unsigned char Tenths;
+  43   1              
+  44   1              
+  45   1              NumberOfHalfAnHourRadiatorOn_Local = NumberOfSecondRadiatorOn_Local/30/60;
+  46   1              
+C51 COMPILER V9.53.0.0   LED_DISPLAY_HIGH_LEVEL_DRIVER                                     09/24/2014 09:43:05 PAGE 2   
+
+  47   1              if(NumberOfSecondRadiatorOn_Local - NumberOfHalfAnHourRadiatorOn_Local*30*60 > 0)
+  48   1                      NumberOfHalfAnHourRadiatorOn_Local++;
+  49   1              
+  50   1              Tens   = NumberOfHalfAnHourRadiatorOn_Local/2/10;
+  51   1              Units  = NumberOfHalfAnHourRadiatorOn_Local/2%10;
+  52   1          Tenths = NumberOfHalfAnHourRadiatorOn_Local%2*5;
+  53   1       
+  54   1              if(Tens != 0)
+  55   1              {
+  56   2                      LedDigitControl(1, BlinkOrStatic, Tens  );
+  57   2              }else
+  58   1                      {
+  59   2                              LedDigitControl(1, LED_DIGIT_OFF, NOTHING               );
+  60   2                      }
+  61   1              LedDigitControl(2, BlinkOrStatic, Units + DECIMAL_POINT );
+  62   1              LedDigitControl(3, BlinkOrStatic, Tenths                                );
+  63   1              LedDigitControl(4, BlinkOrStatic, DIGIT_H                               );
+  64   1      }
+  65          
+  66          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+  67                  Description: Display Temperature on LED screen with always on numbers, mainly used in USER_INPUT_STATE_SE
+             -T_TEMPERATURE
+  68                  Input:           unsigned char TemperatureSet_Local
+  69            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  70          void DisplayStaticTemperature (unsigned char TemperatureSet_Local)
+  71          {
+  72   1              LedDigitControl(1, LED_DIGIT_ON   , TemperatureSet_Local/10     );
+  73   1              LedDigitControl(2, LED_DIGIT_ON   , TemperatureSet_Local%10     );
+  74   1              LedDigitControl(3, LED_DIGIT_ON   ,     DIGIT_C                                 );
+  75   1              LedDigitControl(4, LED_DIGIT_ON   , DIGIT_DEGREE                        );
+  76   1      } // end of void DisplayStaticTemperature (unsigned char TemperatureSet_Local)
+  77          
+  78          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+  79                  Description: Display Temperature on LED screen with blinking numbers, mainly used in USER_INPUT_STATE_SET
+             -_TEMPERATURE
+  80                  Input:           unsigned char TemperatureSet_Local
+  81            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  82          void DisplayBlinkingTemperature (unsigned char TemperatureSet_Local)
+  83          {
+  84   1              LedDigitControl(1, LED_DIGIT_BLINK, TemperatureSet_Local/10     );
+  85   1              LedDigitControl(2, LED_DIGIT_BLINK, TemperatureSet_Local%10     );
+  86   1              LedDigitControl(3, LED_DIGIT_ON   ,     DIGIT_C                                 );
+  87   1              LedDigitControl(4, LED_DIGIT_ON   , DIGIT_DEGREE                        );
+  88   1      } // end of void DisplayBlinkingTemperature (unsigned char TemperatureSet_Local)
+  89          
+  90          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+  91                  Description: Turn off LED display when system is idle/sleep
+  92                  Input:           N.A.
+  93            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+  94          void TurnOffLedDisplay(void)
+  95          {
+  96   1              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING     );
+  97   1              LedDigitControl(2, LED_DIGIT_OFF  , NOTHING     );
+  98   1              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING     );
+  99   1              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING     );
+ 100   1      }
+C51 COMPILER V9.53.0.0   LED_DISPLAY_HIGH_LEVEL_DRIVER                                     09/24/2014 09:43:05 PAGE 3   
+
+ 101          
+ 102          /*--------------------------------------------------------------------------------------------------------
+             -------------------------------------
+ 103                  Description: Changing a state of a LED digit
+ 104                  Input:           unsigned char LedDigitNumber , i.e. which LED digit is controlled by this function)
+ 105                               unsigned char LedDigitChar   , i.e. what character is sent to this digit
+ 106                                           unsigned char LedDigitState  , i.e. what state is for this LED digit: ON/OFF/BLINK
+ 107                  N.B. For some reason, Keil uVersion2 does not compile one of the assignment to assembly even though there
+             - is no any brunch before.
+ 108                           Therefore, when using Keil to simulate the program running, breakpoints cannot be set at these assignme
+             -nts in C.                 
+ 109                           More specifically, LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK; in the LedDigitState == LED_DIGIT_ON is not 
+             -regarded as compiled, which means there is no correlated assembly code there and hence an user cannot set a breakpoint t
+             -here..
+ 110                           And therefore LED display could not display well when digit state changed from ON/OFF to blink or other
+             -wise.
+ 111                           Solution is an update of the compiler. Using latest version of Keil solved the issue of code not gettin
+             -g compiled, i.e. Keil uVersion5.
+ 112            --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+ 113          void LedDigitControl(unsigned char LedDigitNumber, unsigned char LedDigitState, unsigned char LedDigitChar
+             -)
+ 114          {
+ 115   1      /*      switch(LedDigitNumber)
+ 116   1              {
+ 117   1                      case 1:
+ 118   1                                      breaks;
+ 119   1              
+ 120   1              
+ 121   1              }// end of switch(LedDigitNumber)
+ 122   1              
+ 123   1       */
+ 124   1              switch(LedDigitNumber)
+ 125   1              {
+ 126   2                      case 1:
+ 127   2                              {
+ 128   3                                      LedDigit1 = LedDigitChar;
+ 129   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 130   3                                      {
+ 131   4                                              LedDigit1BlinkEn = LED_DIGIT_BLINK;
+ 132   4                                      }
+ 133   3                                              
+ 134   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 135   3                                      {
+ 136   4                                              LedDigit1En = LED_DIGIT_ON;
+ 137   4                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 138   4                                      }
+ 139   3                                      
+ 140   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 141   3                                      {
+ 142   4                                              LedDigit1En = LED_DIGIT_OFF;
+ 143   4                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 144   4                                      }                                                               
+ 145   3                                              
+ 146   3                                      break;  
+ 147   3                              }// end of case 1
+ 148   2      
+ 149   2                      case 2:
+ 150   2                              {
+ 151   3                                      LedDigit2 = LedDigitChar;
+ 152   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 153   3                                      {
+C51 COMPILER V9.53.0.0   LED_DISPLAY_HIGH_LEVEL_DRIVER                                     09/24/2014 09:43:05 PAGE 4   
+
+ 154   4                                              LedDigit2BlinkEn = LED_DIGIT_BLINK;
+ 155   4                                      }
+ 156   3                                              
+ 157   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 158   3                                      {
+ 159   4                                              LedDigit2En = LED_DIGIT_ON;
+ 160   4                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 161   4                                      }
+ 162   3                                      
+ 163   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 164   3                                      {
+ 165   4                                              LedDigit2En = LED_DIGIT_OFF;
+ 166   4                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 167   4                                      }                                                               
+ 168   3                                              
+ 169   3                                      break;  
+ 170   3                              }// end of case 2
+ 171   2      
+ 172   2                      case 3:
+ 173   2                              {
+ 174   3                                      LedDigit3 = LedDigitChar;
+ 175   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 176   3                                      {
+ 177   4                                              LedDigit3BlinkEn = LED_DIGIT_BLINK;
+ 178   4                                      }
+ 179   3                                              
+ 180   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 181   3                                      {
+ 182   4                                              LedDigit3En = LED_DIGIT_ON;
+ 183   4                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 184   4                                      }
+ 185   3                                      
+ 186   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 187   3                                      {
+ 188   4                                              LedDigit3En = LED_DIGIT_OFF;
+ 189   4                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 190   4                                      }                                                               
+ 191   3                                              
+ 192   3                                      break;  
+ 193   3                              }// end of case 3
+ 194   2                                                      
+ 195   2                      case 4:
+ 196   2                              {
+ 197   3                                      LedDigit4 = LedDigitChar;
+ 198   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 199   3                                      {
+ 200   4                                              LedDigit4BlinkEn = LED_DIGIT_BLINK;
+ 201   4                                      }
+ 202   3                                              
+ 203   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 204   3                                      {
+ 205   4                                              LedDigit4En = LED_DIGIT_ON;
+ 206   4                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 207   4                                      }
+ 208   3                                      
+ 209   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 210   3                                      {
+ 211   4                                              LedDigit4En = LED_DIGIT_OFF;
+ 212   4                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 213   4                                      }                                                               
+ 214   3                                              
+ 215   3                                      break;  
+C51 COMPILER V9.53.0.0   LED_DISPLAY_HIGH_LEVEL_DRIVER                                     09/24/2014 09:43:05 PAGE 5   
+
+ 216   3                              }// end of case 4
+ 217   2                              
+ 218   2              }// end of switch(LedDigitNumber)
+ 219   1              
+ 220   1      }//end of LedDigitControl function
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    394    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       6
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

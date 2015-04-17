@@ -1,0 +1,4 @@
+"STARTUP.obj",
+"18b20.obj" 
+TO "test_uVersion5" 
+RAMSIZE(256) 

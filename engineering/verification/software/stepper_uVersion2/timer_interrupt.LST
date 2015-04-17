@@ -1,0 +1,629 @@
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE TIMER_INTERRUPT
+OBJECT MODULE PLACED IN timer_interrupt.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE timer_interrupt.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #ifndef INTRINS_H
+   2                  #include <intrins.h>
+   3                  #define INTRINS_H
+   4          #endif
+   5          
+   6          #ifndef REG52_H
+   7                  #include <reg52.h>      
+   8                  #define REG52_H
+   9          #endif  
+  10          
+  11          #ifndef TIMER_INTERRUPT_H
+  12                  #include <timer_interrupt.h>
+  13                  #define TIMER_INTERRUPT_H
+  14          #endif
+  15                  
+  16                  
+  17          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+  18             STC80c52 pin-out, pins/ports declarations 
+  19           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+  20          // Variables visible from outside world 
+  21          /*----------------N.A.------------------*/
+  22          // Variables invisible from outside world 
+  23          // Port 0
+  24          /*----------------N.A.------------------*/
+  25          // Port 1
+  26          sbit LedDigit1Switch = P1^0;
+  27          sbit LedDigit2Switch = P1^1;
+  28          sbit LedDigit3Switch = P1^2;
+  29          sbit LedDigit4Switch = P1^3;
+  30          sbit ButtonMinus         = P1^4;
+  31          sbit ButtonPlus          = P1^5;
+  32          sbit ButtonSelect        = P1^6;
+  33          sbit ButtonAlt           = P1^7;
+  34          // Port 2
+  35          sfr  LedDigitDisplay = 0xA0; //Port declaration
+  36          // Port 3
+  37          sbit StepperPhase1Switch        = P3^2;
+  38          sbit StepperPhase2Switch        = P3^3;
+  39          sbit StepperPhase3Switch        = P3^4;
+  40          sbit StepperPhase4Switch        = P3^5;
+  41          sbit TestLedState                       = P3^7;
+  42          
+  43           
+  44          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+  45                  LED display variables declarations 
+  46           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+  47          // Variables visible from outside world
+  48          unsigned char LedDigit1            = 8;
+  49          unsigned char LedDigit2            = 8;
+  50          unsigned char LedDigit3            = 8;
+  51          unsigned char LedDigit4            = 8;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 2   
+
+  52          bit               LedDigit1En      = LED_DIGIT_OFF;
+  53          bit               LedDigit2En      = LED_DIGIT_OFF;
+  54          bit               LedDigit3En      = LED_DIGIT_OFF;
+  55          bit               LedDigit4En      = LED_DIGIT_OFF;
+  56          unsigned char LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+  57          unsigned char LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+  58          unsigned char LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+  59          unsigned char LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+  60          // Variables invisible from outside world 
+  61          unsigned char LastCycleOfLedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+  62          unsigned char LastCycleOfLedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+  63          unsigned char LastCycleOfLedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+  64          unsigned char LastCycleOfLedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+  65          bit               BlinkReferenceLedState      = LED_DIGIT_OFF;
+  66          unsigned char DigitNumber                         = 1;
+  67          unsigned int  LedBlinkTimer                       = UNDEFINED_BLINK_TIMER;
+  68          // Table for 7-segment LED to display 0-F,h,o(degree),"0." "1." "2." "3." "4." "5." "6." "7." "8." "9." an
+             -d blank.
+  69          const unsigned code LedDisplayTable[]={
+  70                                                                  ~0x3f,~0x06,~0x5b,~0x4f,~0x66,~0x6d,~0x7d,~0x07,~0x7f,~0x6f,  // 0-9
+  71                                                                  ~0x77,~0x7c,~0x39,~0x5e,~0x79,~0x71,                                              // A-F
+  72                                                                  ~0x74,~0x63,                                                                                              // h,o(degree)
+  73                                                                  ~(0x3f+0x80),~(0x06+0x80),~(0x5b+0x80),~(0x4f+0x80),              // "0." "1." "2." "3." 
+  74                                                                  ~(0x66+0x80),~(0x6d+0x80),~(0x7d+0x80),~(0x07+0x80),              // "4." "5." "6." "7."
+  75                                                                  ~(0x7f+0x80),~(0x6f+0x80),                                                                        // "8." "9."
+  76                                                                  ~(0x00)};                                                                                                         // blank
+  77          
+  78          
+  79          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+  80                  Buttons variables declarations
+  81           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+  82          // Variables visible from outside world 
+  83          bit ButtonMinusState            = RELEASED;
+  84          bit ButtonPlusState                     = RELEASED;
+  85          bit ButtonSelectState           = RELEASED;
+  86          bit ButtonAltState                      = RELEASED;
+  87          // Variables invisible from outside world 
+  88          bit ButtonPlusDebounced         = NO;
+  89          bit ButtonMinusDebounced        = NO;
+  90          bit ButtonSelectDebounced       = NO;
+  91          bit ButtonAltDebounced          = NO;
+  92          unsigned char  ButtonPlusDebounceTime    = UNDEFINED_DEBOUNCE_TIME;
+  93          unsigned char  ButtonMinusDebounceTime   = UNDEFINED_DEBOUNCE_TIME;
+  94          unsigned char  ButtonSelectDebounceTime  = UNDEFINED_DEBOUNCE_TIME;
+  95          unsigned char  ButtonAltDebounceTime     = UNDEFINED_DEBOUNCE_TIME;
+  96          
+  97          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+  98                  Stepper motor variables declarations
+  99           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+ 100          // Time parameter set for stepper motor for one movement in timer1, i.e. the value deciding how long does 
+             -it take stepper motor 
+ 101          // move from the end to another end. The time is set as 5s, each timer interrupt is 5ms for timer1, and he
+             -nce it is 1000 here.
+ 102          // It is not constant here because the stepper driver function actually uses it as a parameter, which is a
+             -ble to adjust the time
+ 103          // if necessary in later verification phase.
+ 104          unsigned int            TimerSetForStepperLastingInOneMovementInTimer1  = 10000;
+ 105          unsigned int            StepperRemainingCyclesOfTimer1Interrupt                 = 0;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 3   
+
+ 106          unsigned char           StepperPhaseIndex                                                               = STEPPER_INITIAL_PHASE;
+ 107          bit                                     StepperEnable                                                                   = STEPPER_OFF;
+ 108          bit                                     LastStateOfStepperEnable                                                = STEPPER_OFF;
+ 109          bit                                     StepperRotationDirection                                                = STEPPER_FORWARD;
+ 110          bit                             StepperForwardStart                                                             = NO;
+ 111          bit                             StepperForwardStop                                                              = NO;
+ 112          bit                             StepperBackwardStart                                                    = NO;
+ 113          bit                             StepperBackwardStop                                                             = NO;
+ 114          
+ 115          
+ 116          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+ 117                  Global counters variables declarations
+ 118           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+ 119          unsigned int OneSecCounterForTimer = 0;
+ 120                                                                  
+ 121          
+ 122          void Timer_4_48ms_with_ID_timer0() interrupt 1
+ 123          {
+ 124   1              TH0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)/0xFF;  
+ 125   1              TL0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)%0xFF;
+ 126   1              
+ 127   1              /* ------------------------------------------------------------------------------------------------------
+             -------------------------------------------
+ 128   1                      Description: Low level driver to drive stepper motor moving forward/backward for amount of time, set by 
+             -TimerSetForStepperLastingInOneMovementInTimer1
+ 129   1                                               It will drive each phase to ON, and drive other phase to OFF every timer1 interrupt called, i.e. 5ms
+             -. 
+ 130   1                                               1.     When StepperForwardStart contains the value of YES, the driver set StepperForwardStart to NO and 
+             -start to drive motor forward for a period, set by TimerSetForStepperLastingInOneMovementInTimer1.
+ 131   1                                               2. StepperForwardStart must not be set to YES again until the StepperForwardStop is set YES and then
+             - back to NO, which means the forward movement has completed.
+ 132   1                                               3. Backward movement is similar to forward movement.
+ 133   1                                               4. Since it is a low-level driver in a timer interrupt, and it has to handshake with high-level driv
+             -er by using handshaking signals StepperForwardStart/StepperForwardStop for forward movements,StepperBackwardStart/Steppe
+             -rBackwardStop for backward movements,  See RunStepperForwardForTime, RunStepperBackwardForTime for detail of handshaking
+             -.
+ 134   1                -------------------------------------------------------------------------------------------------------
+             ------------------------------------------*/
+ 135   1              if(StepperForwardStart == YES)
+ 136   1              {
+ 137   2                      StepperForwardStart = NO;
+ 138   2                      StepperForwardStop  = NO;
+ 139   2                      StepperEnable = STEPPER_ON;
+ 140   2                      StepperRotationDirection = STEPPER_FORWARD;
+ 141   2                      StepperPhaseIndex = STEPPER_INITIAL_PHASE;
+ 142   2              }
+ 143   1      
+ 144   1              if(StepperBackwardStart == YES)
+ 145   1              {
+ 146   2                      StepperBackwardStart = NO;
+ 147   2                      StepperBackwardStop  = NO;
+ 148   2                      StepperEnable = STEPPER_ON;
+ 149   2                      StepperRotationDirection = STEPPER_BACKWARD;
+ 150   2                      StepperPhaseIndex = STEPPER_INITIAL_PHASE;
+ 151   2              }
+ 152   1              
+ 153   1              if(StepperEnable == STEPPER_ON)
+ 154   1              {       
+ 155   2                      if(LastStateOfStepperEnable == STEPPER_OFF)  
+ 156   2                              StepperRemainingCyclesOfTimer1Interrupt = TimerSetForStepperLastingInOneMovementInTimer1;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 4   
+
+ 157   2                      if(StepperRemainingCyclesOfTimer1Interrupt != 0) StepperRemainingCyclesOfTimer1Interrupt--;
+ 158   2                              
+ 159   2                      if(StepperRotationDirection == STEPPER_FORWARD)
+ 160   2                      {
+ 161   3                              StepperPhaseIndex++;
+ 162   3                              if(StepperPhaseIndex == STEPPER_LAST_PHASE + 1) StepperPhaseIndex = STEPPER_INITIAL_PHASE;              
+ 163   3                              if(StepperRemainingCyclesOfTimer1Interrupt == 0) 
+ 164   3                              {
+ 165   4                                      if(StepperPhaseIndex == STEPPER_INITIAL_PHASE + 1)  // Stepper has to stop at the phase 0, otherwise, 
+             -if it stops anywhere else and the motor might not drive gear.
+ 166   4                                      {
+ 167   5                                              StepperEnable      = STEPPER_OFF;
+ 168   5                                              StepperForwardStop = YES;
+ 169   5                                              StepperPhaseIndex  = STEPPER_PHASE_INDEX_ALL_OFF;
+ 170   5                                      }
+ 171   4                              }
+ 172   3                      }
+ 173   2                      
+ 174   2                      if(StepperRotationDirection == STEPPER_BACKWARD)
+ 175   2                      {
+ 176   3                              if(StepperPhaseIndex == STEPPER_INITIAL_PHASE) StepperPhaseIndex = STEPPER_LAST_PHASE + 1;              
+ 177   3                              StepperPhaseIndex--;
+ 178   3                              if(StepperRemainingCyclesOfTimer1Interrupt == 0) 
+ 179   3                              {
+ 180   4                                      if(StepperPhaseIndex == STEPPER_INITIAL_PHASE + 1)
+ 181   4                                      {
+ 182   5                                              StepperEnable      = STEPPER_OFF;
+ 183   5                                              StepperBackwardStop = YES;
+ 184   5                                              StepperPhaseIndex  = STEPPER_PHASE_INDEX_ALL_OFF;
+ 185   5                                      }
+ 186   4                              }
+ 187   3                      }
+ 188   2                      
+ 189   2              }else
+ 190   1                      {
+ 191   2                              StepperPhaseIndex = STEPPER_PHASE_INDEX_ALL_OFF;
+ 192   2                      }// end of if(StepperEnable = STEPPER_ON)
+ 193   1              
+ 194   1              
+ 195   1              
+ 196   1              switch(StepperPhaseIndex)
+ 197   1              {
+ 198   2                      case 1:
+ 199   2                                      StepperPhase1Switch = STEPPER_PHASE_ON;
+ 200   2                                      StepperPhase2Switch = STEPPER_PHASE_OFF;
+ 201   2                                      StepperPhase3Switch = STEPPER_PHASE_OFF;
+ 202   2                                      StepperPhase4Switch = STEPPER_PHASE_OFF;
+ 203   2                                      break;
+ 204   2      
+ 205   2                      case 2:
+ 206   2                                      StepperPhase1Switch = STEPPER_PHASE_OFF;
+ 207   2                                      StepperPhase2Switch = STEPPER_PHASE_ON ;
+ 208   2                                      StepperPhase3Switch = STEPPER_PHASE_OFF;
+ 209   2                                      StepperPhase4Switch = STEPPER_PHASE_OFF;
+ 210   2                                      break;
+ 211   2              
+ 212   2                      case 3:
+ 213   2                                      StepperPhase1Switch = STEPPER_PHASE_OFF;
+ 214   2                                      StepperPhase2Switch = STEPPER_PHASE_OFF;
+ 215   2                                      StepperPhase3Switch = STEPPER_PHASE_ON;
+ 216   2                                      StepperPhase4Switch = STEPPER_PHASE_OFF;
+ 217   2                                      break;  
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 5   
+
+ 218   2      
+ 219   2                      case 4:
+ 220   2                                      StepperPhase1Switch = STEPPER_PHASE_OFF;
+ 221   2                                      StepperPhase2Switch = STEPPER_PHASE_OFF;
+ 222   2                                      StepperPhase3Switch = STEPPER_PHASE_OFF;
+ 223   2                                      StepperPhase4Switch = STEPPER_PHASE_ON;
+ 224   2                                      break;  
+ 225   2                                      
+ 226   2                      default:
+ 227   2                                      StepperPhase1Switch = STEPPER_PHASE_OFF;
+ 228   2                                      StepperPhase2Switch = STEPPER_PHASE_OFF;
+ 229   2                                      StepperPhase3Switch = STEPPER_PHASE_OFF;
+ 230   2                                      StepperPhase4Switch = STEPPER_PHASE_OFF;
+ 231   2                                      break;  
+ 232   2              }// end of switch(StepperPhaseIndex)
+ 233   1      
+ 234   1              LastStateOfStepperEnable = StepperEnable;       
+ 235   1      
+ 236   1      
+ 237   1      }
+ 238          
+ 239                                                                  
+ 240          void Timer5ms_with_ID_timer1() interrupt 3
+ 241          {
+ 242   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 243   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theoret
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 244   1          TestLedState = TEST_LED_ON;
+ 245   1      
+ 246   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 247   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 248   1      
+ 249   1              // Counter for counting 1s
+ 250   1              OneSecCounterForTimer++;
+ 251   1              
+ 252   1              // Counter for counting down the time that 
+ 253   1              
+ 254   1              /* ------------------------------------------------------------------------------------------------------
+             ---------------------------------------
+ 255   1                Description: Debouncing Plus button, Minus button, Select button, Alternative button.
+ 256   1                1. When any button is pressed, programme is going to confirm that it is pressed and 
+ 257   1                it is not a noise as the button is being held for more than 10ms. 
+ 258   1                2. The programme will immediately resonse  the button is pressed if it is not noise 
+ 259   1                and it will not recognise any continuous pressing, which means the count of pressing 
+ 260   1                this button will not increase until it is released and pressed again.
+ 261   1                3. Pressing multiple buttons in the same time will not interference each other as they were denounced i
+             -ndividually.
+ 262   1                and the result of pressing multiple buttons is predictable as the order of each button is pressed.
+ 263   1              ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+ 264   1                if(ButtonPlus == PRESSED)  
+ 265   1                {
+ 266   2                      if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects bu
+             -tton is pressed. ButtonPlusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 267   2                      {       
+ 268   3                              ButtonPlusDebounceTime = 0;
+ 269   3                      }else
+ 270   2                              {       
+ 271   3                                      if(ButtonPlusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 272   3                                      {
+ 273   4                                              ButtonPlusDebounceTime++;
+ 274   4                                              ButtonPlusDebounced = NO;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 6   
+
+ 275   4                                      }               
+ 276   3                                      if(ButtonPlusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 277   3                                      {
+ 278   4                                              if(ButtonPlusDebounced == NO)
+ 279   4                                              {
+ 280   5                                                      ButtonPlusState = PRESSED;
+ 281   5                                              }
+ 282   4                                              ButtonPlusDebounced = YES;
+ 283   4                                      }
+ 284   3                              }// end of if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 285   2                }else
+ 286   1                              {
+ 287   2                                      if(ButtonPlusDebounced == YES)
+ 288   2                                      {
+ 289   3                                              ButtonPlusDebounced = NO;
+ 290   3                                              ButtonPlusDebounceTime = UNDEFINED_DEBOUNCE_TIME;       
+ 291   3                                      }               
+ 292   2                              }// end of if(ButtonPlus == PRESSED) else
+ 293   1                
+ 294   1                if(ButtonMinus == PRESSED)  
+ 295   1                {
+ 296   2                      if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects b
+             -utton is pressed. ButtonMinusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 297   2                      {       
+ 298   3                              ButtonMinusDebounceTime = 0;
+ 299   3                      }else
+ 300   2                              {       
+ 301   3                                      if(ButtonMinusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 302   3                                      {
+ 303   4                                              ButtonMinusDebounceTime++;
+ 304   4                                              ButtonMinusDebounced = NO;
+ 305   4                                      }               
+ 306   3                                      if(ButtonMinusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 307   3                                      {
+ 308   4                                              if(ButtonMinusDebounced == NO)
+ 309   4                                              {
+ 310   5                                                      ButtonMinusState = PRESSED;
+ 311   5                                              }
+ 312   4                                              ButtonMinusDebounced = YES;
+ 313   4                                      }
+ 314   3                              }// end of if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 315   2                }else
+ 316   1                              {
+ 317   2                                      if(ButtonMinusDebounced == YES)
+ 318   2                                      {
+ 319   3                                              ButtonMinusDebounced = NO;
+ 320   3                                              ButtonMinusDebounceTime = UNDEFINED_DEBOUNCE_TIME;      
+ 321   3                                      }               
+ 322   2                              }// end of if(ButtonMinus == PRESSED) else
+ 323   1                
+ 324   1                if(ButtonSelect == PRESSED)  
+ 325   1                {
+ 326   2                      if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects 
+             -button is pressed. ButtonSelectDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 327   2                      {       
+ 328   3                              ButtonSelectDebounceTime = 0;
+ 329   3                      }else
+ 330   2                              {       
+ 331   3                                      if(ButtonSelectDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 332   3                                      {
+ 333   4                                              ButtonSelectDebounceTime++;
+ 334   4                                              ButtonSelectDebounced = NO;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 7   
+
+ 335   4                                      }               
+ 336   3                                      if(ButtonSelectDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 337   3                                      {
+ 338   4                                              if(ButtonSelectDebounced == NO)
+ 339   4                                              {
+ 340   5                                                      ButtonSelectState = PRESSED;
+ 341   5                                              }
+ 342   4                                              ButtonSelectDebounced = YES;
+ 343   4                                      }
+ 344   3                              }// end of if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 345   2                }else
+ 346   1                              {
+ 347   2                                      if(ButtonSelectDebounced == YES)
+ 348   2                                      {
+ 349   3                                              ButtonSelectDebounced = NO;
+ 350   3                                              ButtonSelectDebounceTime = UNDEFINED_DEBOUNCE_TIME;     
+ 351   3                                      }               
+ 352   2                              }// end of if(ButtonSelect == PRESSED) else
+ 353   1                
+ 354   1                if(ButtonAlt == PRESSED)  
+ 355   1                {
+ 356   2                      if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects but
+             -ton is pressed. ButtonAltDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 357   2                      {       
+ 358   3                              ButtonAltDebounceTime = 0;
+ 359   3                      }else
+ 360   2                              {       
+ 361   3                                      if(ButtonAltDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 362   3                                      {
+ 363   4                                              ButtonAltDebounceTime++;
+ 364   4                                              ButtonAltDebounced = NO;
+ 365   4                                      }               
+ 366   3                                      if(ButtonAltDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 367   3                                      {
+ 368   4                                              if(ButtonAltDebounced == NO)
+ 369   4                                              {
+ 370   5                                                      ButtonAltState = PRESSED;
+ 371   5                                              }
+ 372   4                                              ButtonAltDebounced = YES;
+ 373   4                                      }
+ 374   3                              }// end of if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 375   2                }else
+ 376   1                              {
+ 377   2                                      if(ButtonAltDebounced == YES)
+ 378   2                                      {
+ 379   3                                              ButtonAltDebounced = NO;
+ 380   3                                              ButtonAltDebounceTime = UNDEFINED_DEBOUNCE_TIME;        
+ 381   3                                      }               
+ 382   2                              }// end of if(ButtonAlt == PRESSED) else
+ 383   1                
+ 384   1      
+ 385   1        
+ 386   1              /*-------------------------------------------------------------------------------------------------------
+             ------------------------------------------
+ 387   1                      Description: Blink LED at a frequency twice per second.
+ 388   1                      1. If any of four LED blink property is on, this function gets executed and toggle the state of blinking
+             - LED to blink the LED.
+ 389   1                      2. If none of LED blink property is on, this function is disabled.
+ 390   1                      3. LedBlinkTimer can never reach the value of UNDEFINED_BLINK_TIMER(set to 200 here), otherwise the prog
+             -ramme will regard the timer is undefined, i.e. blink function disabled while the blinking is actually running. Therefore
+             - LED_BLINK_TIME has to be less then UNDEFINED_BLINK_TIMER all the time.
+ 391   1                      4. It has to be ensured that all of the digit states being synchronised at the moment any digit changes 
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 8   
+
+             -from not blinking to blinking.
+ 392   1                      5. It has to be ensured that all of the blinking digit toggles with same transitions while blinking, i.e
+             -. all ON -> OFF, or all OFF -> ON.
+ 393   1                      6. It has to be ensured that four digits value changed at the same time, i.e. 4-digit value only get upd
+             -ated after successful display of four digits once
+ 394   1              ---------------------------------------------------------------------------------------------------------
+             ----------------------------------------*/
+ 395   1              DigitNumber ++;
+ 396   1      
+ 397   1              if (DigitNumber >= 5)
+ 398   1                      DigitNumber = 1;
+ 399   1                      
+ 400   1              if(DigitNumber == 1)
+ 401   1              {       
+ 402   2      
+ 403   2                      if(     ((LastCycleOfLedDigit1BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit1BlinkEn == LED_DIGIT_BLINK    )) 
+             - ||
+ 404   2                              ((LastCycleOfLedDigit2BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit2BlinkEn == LED_DIGIT_BLINK    ))  ||
+ 405   2                              ((LastCycleOfLedDigit3BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit3BlinkEn == LED_DIGIT_BLINK    ))  ||
+ 406   2                              ((LastCycleOfLedDigit4BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit4BlinkEn == LED_DIGIT_BLINK    ))  )
+ 407   2                      {
+ 408   3                              if(LedDigit1BlinkEn == LED_DIGIT_BLINK) LedDigit1En = LED_DIGIT_ON;
+ 409   3                              if(LedDigit2BlinkEn == LED_DIGIT_BLINK) LedDigit2En = LED_DIGIT_ON;
+ 410   3                              if(LedDigit3BlinkEn == LED_DIGIT_BLINK) LedDigit3En = LED_DIGIT_ON;
+ 411   3                              if(LedDigit4BlinkEn == LED_DIGIT_BLINK) LedDigit4En = LED_DIGIT_ON;
+ 412   3                      }       
+ 413   2                      
+ 414   2                      if(     ((LastCycleOfLedDigit1BlinkEn == LED_DIGIT_BLINK) && (LedDigit1BlinkEn == LED_DIGIT_NOT_BLINK    )) 
+             - ||
+ 415   2                              ((LastCycleOfLedDigit2BlinkEn == LED_DIGIT_BLINK) && (LedDigit2BlinkEn == LED_DIGIT_NOT_BLINK    ))  ||
+ 416   2                              ((LastCycleOfLedDigit3BlinkEn == LED_DIGIT_BLINK) && (LedDigit3BlinkEn == LED_DIGIT_NOT_BLINK    ))  ||
+ 417   2                              ((LastCycleOfLedDigit4BlinkEn == LED_DIGIT_BLINK) && (LedDigit4BlinkEn == LED_DIGIT_NOT_BLINK    ))  )
+ 418   2                      {
+ 419   3                              if(LedDigit1BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit1En = LED_DIGIT_OFF;
+ 420   3                              if(LedDigit2BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit2En = LED_DIGIT_OFF;
+ 421   3                              if(LedDigit3BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit3En = LED_DIGIT_OFF;
+ 422   3                              if(LedDigit4BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit4En = LED_DIGIT_OFF;                
+ 423   3                      }
+ 424   2                              
+ 425   2                      LastCycleOfLedDigit1BlinkEn = LedDigit1BlinkEn;
+ 426   2                      LastCycleOfLedDigit2BlinkEn = LedDigit2BlinkEn;
+ 427   2                      LastCycleOfLedDigit3BlinkEn = LedDigit3BlinkEn;
+ 428   2                      LastCycleOfLedDigit4BlinkEn = LedDigit4BlinkEn; 
+ 429   2      
+ 430   2                      if( (LedDigit1BlinkEn == LED_DIGIT_BLINK) || (LedDigit2BlinkEn == LED_DIGIT_BLINK) || (LedDigit3BlinkEn 
+             -== LED_DIGIT_BLINK) || (LedDigit4BlinkEn == LED_DIGIT_BLINK) )
+ 431   2                      {
+ 432   3                              if(LedBlinkTimer == UNDEFINED_BLINK_TIMER)
+ 433   3                              {
+ 434   4                                      LedBlinkTimer = 0;
+ 435   4                              }else
+ 436   3                                      {
+ 437   4                                              LedBlinkTimer++;
+ 438   4                                              if(LedBlinkTimer == LED_BLINK_TIME)
+ 439   4                                              {
+ 440   5                                                      if( ((LedDigit1En == LED_DIGIT_ON) && (LedDigit1BlinkEn == LED_DIGIT_BLINK) ) ||
+ 441   5                                                              ((LedDigit2En == LED_DIGIT_ON) && (LedDigit2BlinkEn == LED_DIGIT_BLINK) ) ||
+ 442   5                                                              ((LedDigit3En == LED_DIGIT_ON) && (LedDigit3BlinkEn == LED_DIGIT_BLINK) ) ||
+ 443   5                                                              ((LedDigit4En == LED_DIGIT_ON) && (LedDigit4BlinkEn == LED_DIGIT_BLINK) )  )
+ 444   5                                                      {
+ 445   6                                                              BlinkReferenceLedState = LED_DIGIT_ON;
+ 446   6                                                      }else
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 9   
+
+ 447   5                                                              {
+ 448   6                                                                      BlinkReferenceLedState = LED_DIGIT_OFF;                         
+ 449   6                                                              }
+ 450   5      
+ 451   5                                                      if(LedDigit1BlinkEn == LED_DIGIT_BLINK) 
+ 452   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit1En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit1En = LED_DIGIT_ON;}}
+ 453   5                                                      if(LedDigit2BlinkEn == LED_DIGIT_BLINK) 
+ 454   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit2En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit2En = LED_DIGIT_ON;}}
+ 455   5                                                      if(LedDigit3BlinkEn == LED_DIGIT_BLINK) 
+ 456   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit3En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit3En = LED_DIGIT_ON;}}
+ 457   5                                                      if(LedDigit4BlinkEn == LED_DIGIT_BLINK) 
+ 458   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit4En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit4En = LED_DIGIT_ON;}}
+ 459   5                
+ 460   5                                                      LedBlinkTimer = 0;
+ 461   5                                              }
+ 462   4                                      }// end of if(LedBlinkTimer == UNDEFINED_BLINK_TIMER)
+ 463   3                      }else
+ 464   2                              {
+ 465   3                                      LedBlinkTimer = UNDEFINED_BLINK_TIMER;
+ 466   3                              }//end of if( (LedDigit1En == LED_DIGIT_BLINK) || (LedDigit2En == LED_DIGIT_BLINK) || (LedDigit3En == L
+             -ED_DIGIT_BLINK) || (LedDigit4En == LED_DIGIT_BLINK) )
+ 467   2      
+ 468   2              }// end of if(DigitNumber == 1) 
+ 469   1              
+ 470   1              /*-------------------------------------------------------------------------------------------------------
+             ------------------------------------------
+ 471   1                      Description: Display LED dynamically.
+ 472   1                      The timer interrupt happens every 5ms. And therefore display each LED for 5ms will have the a 20ms loop,
+             - i.e., digit1 for 5ms, and then digit2 for 5ms, and then digit3 for 5ms, and then digit4 for 5ms.  
+ 473   1                      In this time setting, the LEDs are not multiplexing seemed by human eyes.
+ 474   1                      N.B. Display function can never be turned off as there is no other function detecting the transition of 
+             -LED states and call this function. 
+ 475   1                      Once it is disabled by detected the static state of all LED states, it could not change the LED on to LE
+             -D off.
+ 476   1              ---------------------------------------------------------------------------------------------------------
+             ----------------------------------------*/     
+ 477   1      
+ 478   1                      switch(DigitNumber)
+ 479   1                      {
+ 480   2                              case 1 :        LedDigit4Switch = LED_DIGIT_OFF;
+ 481   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit1];
+ 482   2                                                      if(LedDigit1En == LED_DIGIT_ON) {LedDigit1Switch = LED_DIGIT_ON;}
+ 483   2                                                              else{LedDigit1Switch = LED_DIGIT_OFF;}
+ 484   2                                                      break;
+ 485   2                                                      
+ 486   2                              case 2 :        LedDigit1Switch = LED_DIGIT_OFF;
+ 487   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit2];
+ 488   2                                                      if(LedDigit2En == LED_DIGIT_ON) {LedDigit2Switch = LED_DIGIT_ON;}
+ 489   2                                                              else{LedDigit2Switch = LED_DIGIT_OFF;}
+ 490   2                                                      break;
+ 491   2                                                      
+ 492   2                              case 3 :        LedDigit2Switch = LED_DIGIT_OFF;
+ 493   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit3];
+ 494   2                                                      if(LedDigit3En == LED_DIGIT_ON) {LedDigit3Switch = LED_DIGIT_ON;}
+ 495   2                                                              else{LedDigit3Switch = LED_DIGIT_OFF;}
+ 496   2                                                      break;
+ 497   2                                                      
+ 498   2                              case 4 :        LedDigit3Switch = LED_DIGIT_OFF;
+C51 COMPILER V7.06   TIMER_INTERRUPT                                                       09/22/2014 13:13:27 PAGE 10  
+
+ 499   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit4];
+ 500   2                                                      if(LedDigit4En == LED_DIGIT_ON) {LedDigit4Switch = LED_DIGIT_ON;}
+ 501   2                                                              else{LedDigit4Switch = LED_DIGIT_OFF;}
+ 502   2                                                      break;
+ 503   2                                              
+ 504   2                      }// end of switch(DigitNumber)
+ 505   1                      
+ 506   1                      
+ 507   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 508   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theorit
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 509   1              TestLedState = TEST_LED_OFF;
+ 510   1      
+ 511   1                      
+ 512   1              /*                      
+ 513   1                      0.00745226s
+ 514   1                      -
+ 515   1                      0.00748372s
+ 516   1                      =0.00003s = 0.03ms
+ 517   1      
+ 518   1                      0.17415582s
+ 519   1                      -
+ 520   1                      0.17423611s
+ 521   1      
+ 522   1                      = 0.00008s = 0.08ms 
+ 523   1      
+ 524   1                      In total = 0.11ms
+ 525   1      
+ 526   1                      Max Duty cycle = 0.11ms/5ms = 11/500 = 10/500 = 1/50 = 2%
+ 527   1                              
+ 528   1                      */
+ 529   1              
+ 530   1      
+ 531   1                      
+ 532   1      }// end of void Timer5ms_with_ID_timer1() interrupt 3
+ 533          
+ 534          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    904    ----
+   CONSTANT SIZE    =     58    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     26    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =     20    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

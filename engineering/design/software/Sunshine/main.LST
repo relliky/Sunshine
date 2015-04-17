@@ -1,0 +1,466 @@
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #ifndef INTRINS_H
+   2                  #include <intrins.h>
+   3                  #define INTRINS_H
+   4          #endif
+   5                  
+   6          #ifndef REG52_H
+   7                  #include <reg52.h>      
+   8                  #define REG52_H
+   9          #endif  
+  10          
+  11          #ifndef TIMER_INTERRUPT_H
+  12                  #include <timer_interrupt.h>
+  13                  #define TIMER_INTERRUPT_H
+  14          #endif
+  15                  
+  16          #ifndef LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+  17                  #include <led_display_high_level_driver.h>
+  18                  #define LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+  19          #endif
+  20          
+  21          #ifndef STEPPER_HIGH_LEVEL_DRIVER_H
+  22                  #include <stepper_high_level_driver.h>
+  23                  #define STEPPER_HIGH_LEVEL_DRIVER_H
+  24          #endif
+  25          
+  26          #ifndef POWER_MANAGER_H
+  27                  #include <power_manager.h>
+  28                  #define POWER_MANAGER_H
+  29          #endif
+  30          
+  31          
+  32          // User input state macros
+  33          #define USER_INPUT_STATE_NORMAL_DISPLAY         1
+  34          #define USER_INPUT_STATE_SET_TIME                       2
+  35          #define USER_INPUT_STATE_SET_TEMPERATURE        3
+  36          #define USER_INPUT_STATE_IDLE                           4
+  37          
+  38          // Timer parameter
+  39          #define MAXIMUM_SECONDS_RADIATOR_ON (12*60*60)
+  40          #define SECONDS_IN_HALF_AN_HOUR         (1*30*60)
+  41          
+  42          // Clock parameters     
+  43          #define MAXIMUM_SECOND_FOR_A_MINUTE     60
+  44          #define MAXIMUM_MINUTE_FOR_AN_HOUR      60
+  45          
+  46          // Temperature set parameters
+  47          #define MINIMUM_TEMPERATURE_SET 20
+  48          #define MAXIMUM_TEMPERATURE_SET 45
+  49          
+  50          // Idle system transitions time parameters
+  51          #define SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME 10
+  52          #define NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME    20
+  53          
+  54          unsigned int NumberOfSecondRadiatorOn = 0;
+  55          
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 2   
+
+  56          unsigned char SecondForClock              = 0;
+  57          unsigned char MinuteForClock              = 0;
+  58          unsigned char HourForClock                        = 0;  
+  59          unsigned char Display5sCounter        = 0;
+  60          unsigned char TemperatureSet              = MINIMUM_TEMPERATURE_SET;
+  61          unsigned char IdleButtonTime          = 0;
+  62          
+  63          unsigned char UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+  64          
+  65          static unsigned int NumberOfButtonToPressByStepper = 2;
+  66          
+  67          unsigned int TimeForPressingAButton                     = 3000;
+  68          
+  69          
+  70          
+  71          /******************************************************************/
+  72          /*                   main                                       */
+  73          /******************************************************************/
+  74          int main(void)
+  75          {
+  76   1              
+  77   1      
+  78   1              /*  LedDigit1En = LED_DIGIT_OFF;
+  79   1          LedDigit2En = LED_DIGIT_OFF;
+  80   1          LedDigit3En = LED_DIGIT_OFF;
+  81   1          LedDigit4En = LED_DIGIT_OFF;
+  82   1              LedDigit1Switch = LED_DIGIT_OFF;
+  83   1              LedDigit2Switch = LED_DIGIT_OFF;
+  84   1              LedDigit3Switch = LED_DIGIT_OFF;
+  85   1              LedDigit4Switch = LED_DIGIT_OFF;
+  86   1       */
+  87   1              
+  88   1              // Timers interrupt initialisations 
+  89   1              EA   = INTERRUPT_ON;
+  90   1              TMOD = TMOD_TIMER0_16BIT_TIMER1_16BIT;
+  91   1              
+  92   1          ET0  = INTERRUPT_ON;
+  93   1              TH0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)/0xFF;  
+  94   1              TL0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)%0xFF;
+  95   1              TR0  = INTERRUPT_ON;
+  96   1              
+  97   1          ET1  = INTERRUPT_ON;
+  98   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+  99   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 100   1              TR1  = INTERRUPT_ON;
+ 101   1              
+ 102   1      
+ 103   1              
+ 104   1              
+ 105   1              OneSecCounterForTimer = 0;
+ 106   1              SecondForClock            = 0;
+ 107   1              MinuteForClock            = 0;
+ 108   1              HourForClock              = 0;  
+ 109   1              Display5sCounter  = 0 ;
+ 110   1              
+ 111   1              
+ 112   1       while(1)
+ 113   1       {
+ 114   2              
+ 115   2              // Alternative press
+ 116   2              if(ButtonAltState == PRESSED) 
+ 117   2              {
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 3   
+
+ 118   3                      NumberOfButtonToPressByStepper++;
+ 119   3                      ButtonAltState = RELEASED;      
+ 120   3              }       
+ 121   2              PressingButtonsByStepper(TimeForPressingAButton, &NumberOfButtonToPressByStepper);
+ 122   2              
+ 123   2              
+ 124   2              /*
+ 125   2                      Clock
+ 126   2              */
+ 127   2              if(OneSecCounterForTimer == COUNT_1S_FOR_5MS_TIMER)
+ 128   2              {
+ 129   3                      OneSecCounterForTimer = 0;
+ 130   3                      SecondForClock++;
+ 131   3                      
+ 132   3                      // For USER_INPUT_STATE_NORMAL_DISPLAY to display time and temperature and switch between them every 5s 
+ 133   3                      Display5sCounter++;
+ 134   3                      if(Display5sCounter == COUNT_5S_FOR_1S_TIMER*2 + 1)
+ 135   3                      {
+ 136   4                              Display5sCounter = 1;
+ 137   4                      }
+ 138   3                      
+ 139   3                      //Dimming screen counter when buttons are not pressed 
+ 140   3                      IdleButtonTime++;
+ 141   3                      if(IdleButtonTime >= NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME) 
+ 142   3                              IdleButtonTime = NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME;
+ 143   3                              
+ 144   3      
+ 145   3                      // Timer counting down
+ 146   3                      if(NumberOfSecondRadiatorOn != 0)       NumberOfSecondRadiatorOn--;
+ 147   3                      
+ 148   3              }// end of if(OneSecCounterForTimer == COUNT_1S_FOR_5MS_TIMER)
+ 149   2      
+ 150   2      
+ 151   2              
+ 152   2              if(SecondForClock == MAXIMUM_SECOND_FOR_A_MINUTE)
+ 153   2              {
+ 154   3                      SecondForClock = 0;
+ 155   3                      MinuteForClock++;
+ 156   3              }
+ 157   2      
+ 158   2              if(MinuteForClock == MAXIMUM_MINUTE_FOR_AN_HOUR)
+ 159   2              {
+ 160   3                      MinuteForClock = 0;
+ 161   3                      HourForClock++;
+ 162   3              }
+ 163   2              
+ 164   2      
+ 165   2              // Keep the LED display on when keys are being pressed
+ 166   2              if((ButtonPlusState == PRESSED) || (ButtonMinusState == PRESSED) || (ButtonSelectState == PRESSED) || (Bu
+             -ttonAltState == PRESSED) )
+ 167   2              {
+ 168   3                      IdleButtonTime = 0;
+ 169   3              }
+ 170   2                              
+ 171   2      
+ 172   2      /*       
+ 173   2              Description: Setting the user input state machine. 
+ 174   2              1. The product will interface with users in four modes: normal display mode, setting time mode, setting t
+             -emperature mode, idle mode.
+ 175   2      
+ 176   2              2. Normal display mode
+ 177   2                      i)   When the product is powered on, the default mode is the normal display mode.
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 4   
+
+ 178   2                      ii)  It displays the time set and the temperature set
+ 179   2                      iii) It displays the time set for 5s and then switches to display the temperature set for another 5s and
+             - then back to display the time set.
+ 180   2                      iv)  when no any button is pressed for 20s, the user input state switches to the idle mode, LED display 
+             -is off.
+ 181   2      
+ 182   2              3. Setting time mode
+ 183   2                      i)   The time digits, i.e. first, second and third digits, are blinking at the frequency twice every 1s.
+ 184   2                      ii)  The four digits are "xx.xh", where x is a number, "h" is just a letter standing for hours.
+ 185   2                      iii) The first digit can be set to "0", and "1" only.
+ 186   2                      iv)  The second digit can be set to "0." "1." "2." "3." "4." "5." "6." "7." "8." "9." only.
+ 187   2                      v)   The third digit can be set to "0" and "5" only
+ 188   2                      vi)  The forth digit can be set to letter "h" only
+ 189   2                      vii) The time can be set from "0.0h" to "12.0h" with each step 0.5h by pressing plus button and minus bu
+             -tton. For example "0.0h" ->(press plus button) "0.5h" -> (press plus button) "1.0h", or "12.0h" ->(press plus button) "1
+             -2.0h"
+ 190   2                      viii)If MSB of the time is "0", the LED of MSB should be turned off.
+ 191   2                      ix)  When the system is reset, the time is set to the default value, 0.0h.
+ 192   2                      x)   The user input state switches to the normal display mode 10s after none of four buttons has been pr
+             -essed.
+ 193   2                      xi)  Time will be shown as it is rounded up, for example, 20 min and counting down is shown as 0.5h.
+ 194   2                      xii) When time is on 0s, "+" gives 30min and counting down, "-" keeps time 0.
+ 195   2                      xiii)When time is between two whole times of half an hour, "+" results in more 30 min than the previous 
+             -displayed rounded up number, 
+ 196   2                               "-" results in less 30 min than the previous displayed rounded up number, 
+ 197   2                               for example, 1:10 will be displayed as 1.5h, "+" will result in time 2:00, showing 2.0h on screen;
+ 198   2                               for another example,  1:10 will be displayed as 1.5h, "-" will result in time 1:00, showing 1.0h on sc
+             -reen. 
+ 199   2                      xiv) When time is greater than 11:30, for example, 11:40, showing 12.0h on display, "+" will result in t
+             -ime from 11:40 to 12:00, but still showing 12.0h.
+ 200   2                      
+ 201   2                      
+ 202   2              4. Setting temperature mode
+ 203   2                      i)   The temperature digits, i.e. first and second digits, are blinking at the frequency twice every 1s.
+ 204   2                      ii)  The four digits are "xx.Co", where x is a number, "Co" is just a letter and a symbol standing for d
+             -egree Celsius.
+ 205   2                      iii) The first digit can be set to "2", "3", "4" only.
+ 206   2                      iv)  The second digit can be set to "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" only
+ 207   2                      v)   The third digit can be set to letter "C" only
+ 208   2                      vi)  The forth digit can be set to symbol degree "o" only
+ 209   2                      vii) The temperature can be set to from 20Co to 40Co with each step 1Co by pressing plus button and minu
+             -s button. For example "20Co" ->(press plus button) "21Co" -> (press plus button) "22Co", or "40Co" ->(press plus button)
+             - "40Co"
+ 210   2                      viii)When the system is reset, the temperature is set to the default value, 20Co.
+ 211   2                      ix)  The user input state switches to the normal display mode 10s after none of four buttons has been pr
+             -essed.
+ 212   2                      
+ 213   2              5. Idle mode
+ 214   2                      i)   The microcontroller is still running in the normal-on mode, but the LED screen is off.
+ 215   2                      ii)  Any key pressed will put the user input state to the normal display mode.
+ 216   2                      iii) When the system is in the sleep mode, the user input state has to be in the idle mode.
+ 217   2              
+ 218   2       */
+ 219   2              switch(UserInputState)
+ 220   2              {
+ 221   3                      case USER_INPUT_STATE_NORMAL_DISPLAY:
+ 222   3                      {
+ 223   4                              // Action to be done in this state
+ 224   4                              if(Display5sCounter <= COUNT_5S_FOR_1S_TIMER)
+ 225   4                              {
+ 226   5                                      DisplayStaticTemperature(TemperatureSet);
+ 227   5                              }else
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 5   
+
+ 228   4                                      {
+ 229   5                                              DisplayStaticTimer(NumberOfSecondRadiatorOn);
+ 230   5                                      }
+ 231   4                                      
+ 232   4                              // Transition condition of next state
+ 233   4                              if(ButtonSelectState == PRESSED) 
+ 234   4                              {
+ 235   5                                      UserInputState = USER_INPUT_STATE_SET_TIME;
+ 236   5                                      ButtonSelectState = RELEASED;   
+ 237   5                              }
+ 238   4      
+ 239   4                              if(IdleButtonTime == NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME)
+ 240   4                              {
+ 241   5                                      UserInputState = USER_INPUT_STATE_IDLE;
+ 242   5                                      IdleButtonTime = 0;
+ 243   5                              }                       
+ 244   4      
+ 245   4                              PutMicrocontrollerIntoIdleMode();
+ 246   4                              break;                  
+ 247   4                      }// end of case USER_INPUT_STATE_NORMAL_DISPLAY
+ 248   3      
+ 249   3      
+ 250   3                      
+ 251   3                      case USER_INPUT_STATE_SET_TIME:
+ 252   3                      {
+ 253   4                              // Action to be done in this state
+ 254   4                              // If value of time is greater than MAXIMUM_SECONDS_RADIATOR_ON, it will be set to MAXIMUM_SECONDS_RADI
+             -ATOR_ON.
+ 255   4                              if(NumberOfSecondRadiatorOn >= MAXIMUM_SECONDS_RADIATOR_ON) NumberOfSecondRadiatorOn = MAXIMUM_SECONDS_
+             -RADIATOR_ON;
+ 256   4                              
+ 257   4                              if(ButtonPlusState == PRESSED)
+ 258   4                              {
+ 259   5                                      ButtonPlusState = RELEASED;
+ 260   5                                      if(NumberOfSecondRadiatorOn > MAXIMUM_SECONDS_RADIATOR_ON - SECONDS_IN_HALF_AN_HOUR) 
+ 261   5                                              {NumberOfSecondRadiatorOn = MAXIMUM_SECONDS_RADIATOR_ON;}
+ 262   5                                              else
+ 263   5                                                      {
+ 264   6                                                              if( NumberOfSecondRadiatorOn == 0  )
+ 265   6                                                              {
+ 266   7                                                                      NumberOfSecondRadiatorOn += SECONDS_IN_HALF_AN_HOUR;
+ 267   7                                                              }else
+ 268   6                                                                      {
+ 269   7                                                                              NumberOfSecondRadiatorOn += SECONDS_IN_HALF_AN_HOUR;
+ 270   7                                                                              if(NumberOfSecondRadiatorOn%SECONDS_IN_HALF_AN_HOUR != 0 )      
+ 271   7                                                                                      NumberOfSecondRadiatorOn = (NumberOfSecondRadiatorOn/SECONDS_IN_HALF_AN_HOUR + 1)*(SECONDS_IN_HA
+             -LF_AN_HOUR);
+ 272   7                                                                      }                                       
+ 273   6                                                      }
+ 274   5                              }
+ 275   4      
+ 276   4                              if(ButtonMinusState == PRESSED)
+ 277   4                              {
+ 278   5                                      ButtonMinusState = RELEASED;
+ 279   5      
+ 280   5                                      if(NumberOfSecondRadiatorOn < SECONDS_IN_HALF_AN_HOUR) 
+ 281   5                                              {NumberOfSecondRadiatorOn = 0;}
+ 282   5                                              else
+ 283   5                                                      {
+ 284   6                                                              NumberOfSecondRadiatorOn -= SECONDS_IN_HALF_AN_HOUR;
+ 285   6                                                              if(NumberOfSecondRadiatorOn%(30*60) != 0 )
+ 286   6                                                              {
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 6   
+
+ 287   7                                                                      NumberOfSecondRadiatorOn = (NumberOfSecondRadiatorOn/(30*60) + 1)*(30*60);
+ 288   7                                                              }
+ 289   6                                                      }
+ 290   5      
+ 291   5                              }
+ 292   4                              
+ 293   4                              DisplayBlinkingTimer(NumberOfSecondRadiatorOn);
+ 294   4                      
+ 295   4      /*              //------------Code for test NumberOfSecondRadiatorOn mechanism------------------------
+ 296   4                              LedDigitControl(1, LED_DIGIT_ON   , NumberOfSecondRadiatorOn%3600/1000);
+ 297   4                              LedDigitControl(2, LED_DIGIT_ON   , NumberOfSecondRadiatorOn%3600/100%10);
+ 298   4                              LedDigitControl(3, LED_DIGIT_ON   ,     NumberOfSecondRadiatorOn%3600/10%10);
+ 299   4                              LedDigitControl(4, LED_DIGIT_ON   , NumberOfSecondRadiatorOn%3600%10);
+ 300   4                      //--------------End of testing code----------------------------------------------
+ 301   4       */             
+ 302   4                              // Transition condition of next state                   
+ 303   4                              if(ButtonSelectState == PRESSED)
+ 304   4                              {
+ 305   5                                      UserInputState = USER_INPUT_STATE_SET_TEMPERATURE;
+ 306   5                                      ButtonSelectState = RELEASED;
+ 307   5                              }
+ 308   4      
+ 309   4                              if(IdleButtonTime == SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME)
+ 310   4                              {
+ 311   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 312   5                                      IdleButtonTime = 0;
+ 313   5                              }
+ 314   4                              
+ 315   4                              PutMicrocontrollerIntoIdleMode();
+ 316   4                              break;
+ 317   4                      }// end of case USER_INPUT_STATE_SET_TIME
+ 318   3      
+ 319   3                      case USER_INPUT_STATE_SET_TEMPERATURE:
+ 320   3                      {
+ 321   4                              // Action to be done in this state
+ 322   4                              // If value of temperature is greater than MAXIMUM_TEMPERATURE_SET, it will be set to MAXIMUM_TEMPERATU
+             -RE_SET.
+ 323   4                              if(TemperatureSet >= MAXIMUM_TEMPERATURE_SET) TemperatureSet = MAXIMUM_TEMPERATURE_SET;
+ 324   4                              
+ 325   4                              if(ButtonPlusState == PRESSED)
+ 326   4                              {
+ 327   5                                      ButtonPlusState = RELEASED; 
+ 328   5                                      if(TemperatureSet != MAXIMUM_TEMPERATURE_SET) TemperatureSet++;
+ 329   5                              }
+ 330   4      
+ 331   4                              if(ButtonMinusState == PRESSED)
+ 332   4                              {
+ 333   5                                      ButtonMinusState = RELEASED;
+ 334   5                                      if(TemperatureSet != MINIMUM_TEMPERATURE_SET) TemperatureSet--;
+ 335   5                              }
+ 336   4                              
+ 337   4                              DisplayBlinkingTemperature(TemperatureSet);
+ 338   4                              
+ 339   4                              // Transition condition of next state                                   
+ 340   4                              if(ButtonSelectState == PRESSED)
+ 341   4                              {
+ 342   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 343   5                                      ButtonSelectState = RELEASED;
+ 344   5                              }
+ 345   4      
+ 346   4                              if(IdleButtonTime == SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME)
+ 347   4                              {
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 7   
+
+ 348   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 349   5                                      IdleButtonTime = 0;
+ 350   5                              }                       
+ 351   4      
+ 352   4                              PutMicrocontrollerIntoIdleMode();
+ 353   4                              break;
+ 354   4                      }// end of case USER_INPUT_STATE_SET_TEMPERATURE
+ 355   3      
+ 356   3                      case USER_INPUT_STATE_IDLE:
+ 357   3                      {
+ 358   4                              // Action to be done in this state
+ 359   4                              TurnOffLedDisplay();
+ 360   4                              
+ 361   4                              // Transition condition of next state   
+ 362   4                              if(ButtonSelectState == PRESSED)
+ 363   4                              {
+ 364   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 365   5                                      ButtonSelectState = RELEASED;
+ 366   5                              }                               
+ 367   4                              if(ButtonPlusState == PRESSED)
+ 368   4                              {
+ 369   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 370   5                                      ButtonPlusState = RELEASED;
+ 371   5                              }
+ 372   4                              if(ButtonMinusState == PRESSED)
+ 373   4                              {
+ 374   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 375   5                                      ButtonMinusState = RELEASED;
+ 376   5                              }
+ 377   4                              if(ButtonAltState == PRESSED)
+ 378   4                              {
+ 379   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 380   5                                      ButtonAltState = RELEASED;
+ 381   5                              }
+ 382   4      
+ 383   4                              PutMicrocontrollerIntoIdleMode();
+ 384   4      
+ 385   4                              break;
+ 386   4                      }// end of case USER_INPUT_STATE_IDLE                   
+ 387   3      
+ 388   3                      default:
+ 389   3                      {
+ 390   4                              UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 391   4                              break;
+ 392   4                      }
+ 393   3                      
+ 394   3              }// end of switch(UserInputState)
+ 395   2      
+ 396   2              
+ 397   2              
+ 398   2       
+ 399   2              
+ 400   2      
+ 401   2       }// end of while(1) loop
+ 402   1       
+ 403   1      
+ 404   1       return(0);
+ 405   1      } // end of int main(void)
+ 406          
+ 407          
+ 408          
+ 409          
+C51 COMPILER V9.53.0.0   MAIN                                                              09/24/2014 09:43:05 PAGE 8   
+
+ 410          
+*** WARNING C294 IN LINE 404 OF main.c: unreachable code
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    548    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     13    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,15 @@
+
+timer1
+ButtonPlus = 0;
+ButtonPlusDebounceTime = 0;
+DigitNumber = 4;
+LedDigit1BlinkEn = 2;
+LedBlinkTimer = 0;
+
+timer0
+StepperForwardStart = 1;
+
+main
+N.A.
+
+//ButtonPlus = 0;ButtonPlusDebounceTime = 0;DigitNumber = 4;LedDigit1BlinkEn = 2;LedBlinkTimer = 0;

@@ -1,0 +1,170 @@
+C51 COMPILER V9.53.0.0   STEPPER_HIGH_LEVEL_DRIVER                                         09/24/2014 09:43:05 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE STEPPER_HIGH_LEVEL_DRIVER
+OBJECT MODULE PLACED IN stepper_high_level_driver.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE stepper_high_level_driver.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #ifndef INTRINS_H
+   2                  #include <intrins.h>
+   3                  #define INTRINS_H
+   4          #endif
+   5                  
+   6          #ifndef REG52_H
+   7                  #include <reg52.h>      
+   8                  #define REG52_H
+   9          #endif  
+  10          
+  11          #ifndef TIMER_INTERRUPT_H
+  12                  #include <timer_interrupt.h>
+  13                  #define TIMER_INTERRUPT_H
+  14          #endif
+  15          
+  16          
+  17          #define RUNNING_STATE_NOT_RUN_YET                       0
+  18          #define RUNNING_STATE_RUNNING                           1
+  19          #define RUNNING_STATE_FORWARD_RUNNING       0x2
+  20          #define RUNNING_STATE_BACKWARD_RUNNING          0x3
+  21          
+  22          
+  23          
+  24          bit StateOfStepperForwardRun    = RUNNING_STATE_NOT_RUN_YET;
+  25          bit StateOfStepperBackwardRun   = RUNNING_STATE_NOT_RUN_YET;
+  26          
+  27          unsigned char   StepperRunningState = RUNNING_STATE_NOT_RUN_YET;
+  28          
+  29          
+  30          
+  31          bit RunStepperForwardForTime(unsigned int RunningTime)
+  32          {
+  33   1              int Finished = NO;
+  34   1              
+  35   1              if(StateOfStepperForwardRun == RUNNING_STATE_NOT_RUN_YET)
+  36   1              {
+  37   2                      StepperForwardStart = YES;
+  38   2                      StateOfStepperForwardRun = RUNNING_STATE_RUNNING;
+  39   2                      TimerSetForStepperLastingInOneMovementInTimer1 = RunningTime;
+  40   2              }
+  41   1      
+  42   1              if(StateOfStepperForwardRun == RUNNING_STATE_RUNNING)
+  43   1              {
+  44   2                      if(StepperForwardStop == YES)
+  45   2                      {
+  46   3                              Finished                                 =      YES;
+  47   3                              StepperForwardStop               =  NO;
+  48   3                              StateOfStepperForwardRun =      RUNNING_STATE_NOT_RUN_YET;
+  49   3                      }
+  50   2              }
+  51   1      
+  52   1              if(Finished == YES) 
+  53   1              {
+  54   2                      return(FINISHED);
+  55   2              }else 
+C51 COMPILER V9.53.0.0   STEPPER_HIGH_LEVEL_DRIVER                                         09/24/2014 09:43:05 PAGE 2   
+
+  56   1                      {
+  57   2                              return(CONTINUOUS);                     
+  58   2                      }
+  59   1                      
+  60   1      }// end of RunStepperForwardForTime(unsigned int RunningTime)
+  61          
+  62          
+  63          bit RunStepperBackwardForTime(unsigned int RunningTime)
+  64          {
+  65   1              int Finished = NO;
+  66   1              
+  67   1              if(StateOfStepperBackwardRun == RUNNING_STATE_NOT_RUN_YET)
+  68   1              {
+  69   2                      StepperBackwardStart = YES;
+  70   2                      StateOfStepperBackwardRun = RUNNING_STATE_RUNNING;
+  71   2                      TimerSetForStepperLastingInOneMovementInTimer1 = RunningTime;
+  72   2              }
+  73   1      
+  74   1              if(StateOfStepperBackwardRun == RUNNING_STATE_RUNNING)
+  75   1              {
+  76   2                      if(StepperBackwardStop == YES)
+  77   2                      {
+  78   3                              Finished                                        = YES;
+  79   3                              StepperBackwardStop             = NO;
+  80   3                              StateOfStepperBackwardRun       = RUNNING_STATE_NOT_RUN_YET;
+  81   3                      }
+  82   2              }
+  83   1      
+  84   1              if(Finished == YES) 
+  85   1              {
+  86   2                      return(FINISHED);
+  87   2              }else 
+  88   1                      {
+  89   2                              return(CONTINUOUS);                     
+  90   2                      }
+  91   1                      
+  92   1      }// end of RunStepperBackwardForTime(unsigned int RunningTime)
+  93          
+  94          
+  95          bit RunStepperForwardAndBackwardForTime (unsigned int RunningTimeForTwoCycle)
+  96          {
+  97   1              unsigned int    RunningTimeForOneCycle = RunningTimeForTwoCycle / 2;
+  98   1              bit                             Finished                           = NO;
+  99   1                                      
+ 100   1              
+ 101   1              if(StepperRunningState == RUNNING_STATE_NOT_RUN_YET)    
+ 102   1                      {
+ 103   2                              RunStepperForwardForTime(RunningTimeForOneCycle);
+ 104   2                              StepperRunningState = RUNNING_STATE_FORWARD_RUNNING;
+ 105   2                      }
+ 106   1                      
+ 107   1              if(StepperRunningState == RUNNING_STATE_FORWARD_RUNNING)
+ 108   1              {
+ 109   2                      if(RunStepperForwardForTime(RunningTimeForOneCycle) == FINISHED) 
+ 110   2                                      StepperRunningState = RUNNING_STATE_BACKWARD_RUNNING;
+ 111   2              }
+ 112   1      
+ 113   1              if(StepperRunningState == RUNNING_STATE_BACKWARD_RUNNING)
+ 114   1              {
+ 115   2                      if(RunStepperBackwardForTime(RunningTimeForOneCycle) == FINISHED) 
+ 116   2                              {
+ 117   3                                      StepperRunningState = RUNNING_STATE_NOT_RUN_YET;
+C51 COMPILER V9.53.0.0   STEPPER_HIGH_LEVEL_DRIVER                                         09/24/2014 09:43:05 PAGE 3   
+
+ 118   3                                      Finished = YES; 
+ 119   3                              }
+ 120   2              }
+ 121   1       
+ 122   1              if(Finished == YES) 
+ 123   1              {
+ 124   2                      return(FINISHED);
+ 125   2              }else 
+ 126   1                      {
+ 127   2                              return(CONTINUOUS);                     
+ 128   2                      }       
+ 129   1      
+ 130   1      }// end of RunStepperForwardAndBackwardForTime (unsigned int RunningTimeForTwoCycle)
+ 131          
+ 132          
+ 133          void PressingButtonsByStepper(unsigned int RunningTimeForTwoCycle, unsigned int *PointerOfNumberOfButtonTo
+             -PressByStepper)
+ 134          {
+ 135   1              if(*PointerOfNumberOfButtonToPressByStepper != 0)
+ 136   1              {
+ 137   2                      if(RunStepperForwardAndBackwardForTime(RunningTimeForTwoCycle) == FINISHED)
+ 138   2                              (*PointerOfNumberOfButtonToPressByStepper)--;
+ 139   2              }
+ 140   1      
+ 141   1      }//  end of PressingButtonsByStepper(unsigned int RunningTimeForTwoCycle, unsigned int *PointerOfNumberOfB
+             -uttonToPressByStepper)
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    174    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      1       3
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

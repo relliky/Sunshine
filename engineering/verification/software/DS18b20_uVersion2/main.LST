@@ -1,0 +1,593 @@
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE main.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #ifndef INTRINS_H
+   2                  #include <intrins.h>
+   3                  #define INTRINS_H
+   4          #endif
+   5                  
+   6          #ifndef REG52_H
+   7                  #include <reg52.h>      
+   8                  #define REG52_H
+   9          #endif  
+  10          
+  11          #ifndef TIMER_INTERRUPT_H
+  12                  #include <timer_interrupt.h>
+  13                  #define TIMER_INTERRUPT_H
+  14          #endif
+  15                  
+  16          #ifndef LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+  17                  #include <led_display_high_level_driver.h>
+  18                  #define LED_DISPLAY_HIGH_LEVEL_DRIVER_H
+  19          #endif
+  20          
+  21          #ifndef STEPPER_HIGH_LEVEL_DRIVER_H
+  22                  #include <stepper_high_level_driver.h>
+  23                  #define STEPPER_HIGH_LEVEL_DRIVER_H
+  24          #endif
+  25          
+  26          
+  27          // User input state macros
+  28          #define USER_INPUT_STATE_NORMAL_DISPLAY         1
+  29          #define USER_INPUT_STATE_SET_TIME                       2
+  30          #define USER_INPUT_STATE_SET_TEMPERATURE        3
+  31          #define USER_INPUT_STATE_IDLE                           4
+  32          
+  33          // Timer parameter
+  34          #define MAXIMUM_SECONDS_RADIATOR_ON (12*60*60)
+  35          #define SECONDS_IN_HALF_AN_HOUR         (1*30*60)
+  36          
+  37          // Clock parameters     
+  38          #define MAXIMUM_SECOND_FOR_A_MINUTE     60
+  39          #define MAXIMUM_MINUTE_FOR_AN_HOUR      60
+  40          
+  41          // Temperature set parameters
+  42          #define MINIMUM_TEMPERATURE_SET 20
+  43          #define MAXIMUM_TEMPERATURE_SET 45
+  44          
+  45          // Idle system transitions time parameters
+  46          #define SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME 10
+  47          #define NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME    30
+  48          
+  49          unsigned int NumberOfSecondRadiatorOn = 0;
+  50          
+  51          unsigned char SecondForClock              = 0;
+  52          unsigned char MinuteForClock              = 0;
+  53          unsigned char HourForClock                        = 0;  
+  54          unsigned char Display5sCounter        = 0;
+  55          unsigned char TemperatureSet              = MINIMUM_TEMPERATURE_SET;
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 2   
+
+  56          unsigned char TemperatureMeasured         = 22;
+  57          unsigned char IdleButtonTime          = 0;
+  58          
+  59          unsigned char UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+  60          
+  61          static unsigned int NumberOfButtonToPressByStepper = 0;
+  62          
+  63          unsigned int TimeForPressingAButton                     = 3000;
+  64          
+  65          
+  66          // ----------18b20 test code-----------
+  67          #define uchar unsigned char
+  68          #define uint unsigned int
+  69          sbit DS=P3^0;           //define interface
+  70          uint temp;             // variable of temperature
+  71          uchar flag1;            // sign of the result positive or negative
+  72          sbit dula=P2^6;
+  73          sbit wela=P2^7;
+  74          unsigned char code table[]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,
+  75                                  0x07,0x7f,0x6f,0x77,0x7c,0x39,0x5e,0x79,0x71};
+  76          unsigned char code table1[]={0xbf,0x86,0xdb,0xcf,0xe6,0xed,0xfd,
+  77                                  0x87,0xff,0xef};
+  78          // ----------end of 18b20 test code-----------
+  79          
+  80          
+  81          void delay(uint count)      //delay
+  82          {
+  83   1        uint i;
+  84   1        while(count)
+  85   1        {
+  86   2          i=200;
+  87   2          while(i>0)
+  88   2          i--;
+  89   2          count--;
+  90   2        }
+  91   1      }
+  92          void dsreset(void)       //send reset and initialization command
+  93          {
+  94   1        uint i;
+  95   1        DS=0;
+  96   1        i=103;
+  97   1        while(i>0)i--;
+  98   1        DS=1;
+  99   1        i=4;
+ 100   1        while(i>0)i--;
+ 101   1      }
+ 102          
+ 103          bit tmpreadbit(void)       //read a bit
+ 104          {
+ 105   1         uint i;
+ 106   1         bit dat;
+ 107   1         DS=0;i++;          //i++ for delay
+ 108   1         DS=1;i++;i++;
+ 109   1         dat=DS;
+ 110   1         i=8;while(i>0)i--;
+ 111   1         return (dat);
+ 112   1      }
+ 113          
+ 114          uchar tmpread(void)   //read a byte date
+ 115          {
+ 116   1        uchar i,j,dat;
+ 117   1        dat=0;
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 3   
+
+ 118   1        for(i=1;i<=8;i++)
+ 119   1        {
+ 120   2          j=tmpreadbit();
+ 121   2          dat=(j<<7)|(dat>>1);   
+ 122   2        }
+ 123   1        return(dat);
+ 124   1      }
+ 125          
+ 126          void tmpwritebyte(uchar dat)   //write a byte to ds18b20
+ 127          {
+ 128   1        uint i;
+ 129   1        uchar j;
+ 130   1        bit testb;
+ 131   1        for(j=1;j<=8;j++)
+ 132   1        {
+ 133   2          testb=dat&0x01;
+ 134   2          dat=dat>>1;
+ 135   2          if(testb)     //write 1
+ 136   2          {
+ 137   3            DS=0;
+ 138   3            i++;i++;
+ 139   3            DS=1;
+ 140   3            i=8;while(i>0)i--;
+ 141   3          }
+ 142   2          else
+ 143   2          {
+ 144   3            DS=0;       //write 0
+ 145   3            i=8;while(i>0)i--;
+ 146   3            DS=1;
+ 147   3            i++;i++;
+ 148   3          }
+ 149   2      
+ 150   2        }
+ 151   1      }
+ 152          
+ 153          void tmpchange(void)  //DS18B20 begin change
+ 154          {
+ 155   1        dsreset();
+ 156   1        delay(1);
+ 157   1        tmpwritebyte(0xcc);  // address all drivers on bus
+ 158   1        tmpwritebyte(0x44);  //  initiates a single temperature conversion
+ 159   1      }
+ 160          
+ 161          uint tmp()               //get the temperature
+ 162          {
+ 163   1        float tt;
+ 164   1        uchar a,b;
+ 165   1        uchar temp_uchar;
+ 166   1        dsreset();
+ 167   1        delay(1);
+ 168   1        tmpwritebyte(0xcc);
+ 169   1        tmpwritebyte(0xbe);
+ 170   1        a=tmpread();
+ 171   1        b=tmpread();
+ 172   1        temp=b;
+ 173   1        temp<<=8;             //two byte  compose a int variable
+ 174   1        temp=temp|a;
+ 175   1        tt=temp*0.0625;
+ 176   1        temp=tt*10+0.5;
+ 177   1        temp_uchar = (uchar)temp/10;
+ 178   1        return temp;
+ 179   1      }
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 4   
+
+ 180          
+ 181          
+ 182          /******************************************************************/
+ 183          /*                   main                                       */
+ 184          /******************************************************************/
+ 185          int main(void)
+ 186          {
+ 187   1               uchar a;
+ 188   1       
+ 189   1        
+ 190   1        
+ 191   1      
+ 192   1              /*  LedDigit1En = LED_DIGIT_OFF;
+ 193   1          LedDigit2En = LED_DIGIT_OFF;
+ 194   1          LedDigit3En = LED_DIGIT_OFF;
+ 195   1          LedDigit4En = LED_DIGIT_OFF;
+ 196   1              LedDigit1Switch = LED_DIGIT_OFF;
+ 197   1              LedDigit2Switch = LED_DIGIT_OFF;
+ 198   1              LedDigit3Switch = LED_DIGIT_OFF;
+ 199   1              LedDigit4Switch = LED_DIGIT_OFF;
+ 200   1       */
+ 201   1              
+ 202   1              // Timers interrupt initialisations 
+ 203   1              EA   = INTERRUPT_ON;
+ 204   1              TMOD = TMOD_TIMER0_16BIT_TIMER1_16BIT;
+ 205   1              
+ 206   1          ET0  = INTERRUPT_ON;
+ 207   1              TH0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)/0xFF;  
+ 208   1              TL0  = (0xFFFF - CYCLE_FOR_TIMER0_UNDER_11_0952MHZ)%0xFF;
+ 209   1              TR0  = INTERRUPT_ON;
+ 210   1              
+ 211   1          ET1  = INTERRUPT_ON;
+ 212   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 213   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 214   1              TR1  = INTERRUPT_ON;
+ 215   1              
+ 216   1      
+ 217   1              
+ 218   1              
+ 219   1              OneSecCounterForTimer = 0;
+ 220   1              SecondForClock            = 0;
+ 221   1              MinuteForClock            = 0;
+ 222   1              HourForClock              = 0;  
+ 223   1              Display5sCounter  = 0 ;
+ 224   1              
+ 225   1              
+ 226   1       while(1)
+ 227   1       {
+ 228   2               tmpchange();
+ 229   2              for(a=10;a>0;a--)
+ 230   2              {   
+ 231   3                      TemperatureMeasured = (unsigned char) tmp();
+ 232   3              }
+ 233   2              
+ 234   2              DisplayStaticTemperature(TemperatureMeasured);
+ 235   2              
+ 236   2              // // Alternative press
+ 237   2              // if(ButtonAltState == PRESSED) 
+ 238   2              // {
+ 239   2                      // NumberOfButtonToPressByStepper++;
+ 240   2                      // ButtonAltState = RELEASED;   
+ 241   2              // }    
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 5   
+
+ 242   2              // PressingButtonsByStepper(TimeForPressingAButton, &NumberOfButtonToPressByStepper);
+ 243   2              
+ 244   2              
+ 245   2              // /*
+ 246   2                      // Clock
+ 247   2              // */
+ 248   2              // if(OneSecCounterForTimer == COUNT_1S_FOR_5MS_TIMER)
+ 249   2              // {
+ 250   2                      // OneSecCounterForTimer = 0;
+ 251   2                      // SecondForClock++;
+ 252   2                      
+ 253   2                      // // For USER_INPUT_STATE_NORMAL_DISPLAY to display time and temperature and switch between them every 
+             -5s 
+ 254   2                      // Display5sCounter++;
+ 255   2                      // if(Display5sCounter == COUNT_5S_FOR_1S_TIMER*3 + 1)
+ 256   2                      // {
+ 257   2                              // Display5sCounter = 1;
+ 258   2                      // }
+ 259   2                      
+ 260   2                      // //Dimming screen counter when buttons are not pressed 
+ 261   2                      // IdleButtonTime++;
+ 262   2                      // if(IdleButtonTime >= NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME) 
+ 263   2                              // IdleButtonTime = NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME;
+ 264   2                              
+ 265   2      
+ 266   2                      // // Timer counting down
+ 267   2                      // if(NumberOfSecondRadiatorOn != 0)    NumberOfSecondRadiatorOn--;
+ 268   2                      
+ 269   2              // }// end of if(OneSecCounterForTimer == COUNT_1S_FOR_5MS_TIMER)
+ 270   2      
+ 271   2      
+ 272   2              
+ 273   2              // if(SecondForClock == MAXIMUM_SECOND_FOR_A_MINUTE)
+ 274   2              // {
+ 275   2                      // SecondForClock = 0;
+ 276   2                      // MinuteForClock++;
+ 277   2              // }
+ 278   2      
+ 279   2              // if(MinuteForClock == MAXIMUM_MINUTE_FOR_AN_HOUR)
+ 280   2              // {
+ 281   2                      // MinuteForClock = 0;
+ 282   2                      // HourForClock++;
+ 283   2              // }
+ 284   2              
+ 285   2      
+ 286   2              // // Keep the LED display on when keys are being pressed
+ 287   2              // if((ButtonPlusState == PRESSED) || (ButtonMinusState == PRESSED) || (ButtonSelectState == PRESSED) || 
+             -(ButtonAltState == PRESSED) )
+ 288   2              // {
+ 289   2                      // IdleButtonTime = 0;
+ 290   2              // }
+ 291   2                              
+ 292   2      
+ 293   2      // /*    
+ 294   2              // Description: Setting the user input state machine. 
+ 295   2              // 1. The product will interface with users in four modes: normal display mode, setting time mode, settin
+             -g temperature mode, idle mode.
+ 296   2      
+ 297   2              // 2. Normal display mode
+ 298   2                      // i)   When the product is powered on, the default mode is the normal display mode.
+ 299   2                      // ii)  It displays the time set and the temperature set
+ 300   2                      // iii) It displays the time set for 5s and then switches to display the temperature set for another 5s 
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 6   
+
+             -and then back to display the time set.
+ 301   2                      // iv)  when no any button is pressed for 30s, the user input state switches to the idle mode, LED displ
+             -ay is off.
+ 302   2      
+ 303   2              // 3. Setting time mode
+ 304   2                      // i)   The time digits, i.e. first, second and third digits, are blinking at the frequency twice every 
+             -1s.
+ 305   2                      // ii)  The four digits are "xx.xh", where x is a number, "h" is just a letter standing for hours.
+ 306   2                      // iii) The first digit can be set to "0", and "1" only.
+ 307   2                      // iv)  The second digit can be set to "0." "1." "2." "3." "4." "5." "6." "7." "8." "9." only.
+ 308   2                      // v)   The third digit can be set to "0" and "5" only
+ 309   2                      // vi)  The forth digit can be set to letter "h" only
+ 310   2                      // vii) The time can be set from "0.0h" to "12.0h" with each step 0.5h by pressing plus button and minus
+             - button. For example "0.0h" ->(press plus button) "0.5h" -> (press plus button) "1.0h", or "12.0h" ->(press plus button)
+             - "12.0h"
+ 311   2                      // viii)If MSB of the time is "0", the LED of MSB should be turned off.
+ 312   2                      // ix)  When the system is reset, the time is set to the default value, 0.0h.
+ 313   2                      // x)   The user input state switches to the normal display mode 10s after none of four buttons has been
+             - pressed.
+ 314   2                      // xi)  Time will be shown as it is rounded up, for example, 20 min and counting down is shown as 0.5h.
+ 315   2                      // xii) When time is on 0s, "+" gives 30min and counting down, "-" keeps time 0.
+ 316   2                      // xiii)When time is between two whole times of half an hour, "+" results in more 30 min than the previo
+             -us displayed rounded up number, 
+ 317   2                               // "-" results in less 30 min than the previous displayed rounded up number, 
+ 318   2                               // for example, 1:10 will be displayed as 1.5h, "+" will result in time 2:00, showing 2.0h on screen;
+ 319   2                               // for another example,  1:10 will be displayed as 1.5h, "-" will result in time 1:00, showing 1.0h on
+             - screen. 
+ 320   2                      // xiv) When time is greater than 11:30, for example, 11:40, showing 12.0h on display, "+" will result i
+             -n time from 11:40 to 12:00, but still showing 12.0h.
+ 321   2                      
+ 322   2                      
+ 323   2              // 4. Setting temperature mode
+ 324   2                      // i)   The temperature digits, i.e. first and second digits, are blinking at the frequency twice every 
+             -1s.
+ 325   2                      // ii)  The four digits are "xx.Co", where x is a number, "Co" is just a letter and a symbol standing fo
+             -r degree Celsius.
+ 326   2                      // iii) The first digit can be set to "2", "3", "4" only.
+ 327   2                      // iv)  The second digit can be set to "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" only
+ 328   2                      // v)   The third digit can be set to letter "C" only
+ 329   2                      // vi)  The forth digit can be set to symbol degree "o" only
+ 330   2                      // vii) The temperature can be set to from 20Co to 40Co with each step 1Co by pressing plus button and m
+             -inus button. For example "20Co" ->(press plus button) "21Co" -> (press plus button) "22Co", or "40Co" ->(press plus butt
+             -on) "40Co"
+ 331   2                      // viii)When the system is reset, the temperature is set to the default value, 20Co.
+ 332   2                      // ix)  The user input state switches to the normal display mode 10s after none of four buttons has been
+             - pressed.
+ 333   2                      
+ 334   2              // 5. Idle mode
+ 335   2                      // i)   The microcontroller is still running in the normal-on mode, but the LED screen is off.
+ 336   2                      // ii)  Any key pressed will put the user input state to the normal display mode.
+ 337   2                      // iii) When the system is in the sleep mode, the user input state has to be in the idle mode.
+ 338   2              
+ 339   2       // */
+ 340   2              // switch(UserInputState)
+ 341   2              // {
+ 342   2                      // case USER_INPUT_STATE_NORMAL_DISPLAY:
+ 343   2                      // {
+ 344   2                              // // Action to be done in this state
+ 345   2                              // if(Display5sCounter <= COUNT_5S_FOR_1S_TIMER)
+ 346   2                              // {
+ 347   2                                      // DisplayStaticTemperature(TemperatureSet);
+ 348   2                              // }else
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 7   
+
+ 349   2                                      // {
+ 350   2                                              // if(Display5sCounter <= COUNT_5S_FOR_1S_TIMER*2)
+ 351   2                                              // {
+ 352   2                                                      // DisplayStaticTemperature(TemperatureMeasured);
+ 353   2                                              // }else
+ 354   2                                                      // {
+ 355   2                                                              // DisplayStaticTimer(NumberOfSecondRadiatorOn);
+ 356   2                                                      // }
+ 357   2                                      // }
+ 358   2                                      
+ 359   2                              // // Transition condition of next state
+ 360   2                              // if(ButtonSelectState == PRESSED) 
+ 361   2                              // {
+ 362   2                                      // UserInputState = USER_INPUT_STATE_SET_TIME;
+ 363   2                                      // ButtonSelectState = RELEASED;        
+ 364   2                              // }
+ 365   2      
+ 366   2                              // if(IdleButtonTime == NORMAL_DISPLAY_STATE_TO_IDLE_STATE_TIME)
+ 367   2                              // {
+ 368   2                                      // UserInputState = USER_INPUT_STATE_IDLE;
+ 369   2                                      // IdleButtonTime = 0;
+ 370   2                              // }                    
+ 371   2      
+ 372   2                              // break;                       
+ 373   2                      // }// end of case USER_INPUT_STATE_NORMAL_DISPLAY
+ 374   2      
+ 375   2      
+ 376   2                      
+ 377   2                      // case USER_INPUT_STATE_SET_TIME:
+ 378   2                      // {
+ 379   2                              // // Action to be done in this state
+ 380   2                              // // If value of time is greater than MAXIMUM_SECONDS_RADIATOR_ON, it will be set to MAXIMUM_SECONDS_R
+             -ADIATOR_ON.
+ 381   2                              // if(NumberOfSecondRadiatorOn >= MAXIMUM_SECONDS_RADIATOR_ON) NumberOfSecondRadiatorOn = MAXIMUM_SECON
+             -DS_RADIATOR_ON;
+ 382   2                              
+ 383   2                              // if(ButtonPlusState == PRESSED)
+ 384   2                              // {
+ 385   2                                      // ButtonPlusState = RELEASED;
+ 386   2                                      // if(NumberOfSecondRadiatorOn > MAXIMUM_SECONDS_RADIATOR_ON - SECONDS_IN_HALF_AN_HOUR) 
+ 387   2                                              // {NumberOfSecondRadiatorOn = MAXIMUM_SECONDS_RADIATOR_ON;}
+ 388   2                                              // else
+ 389   2                                                      // {
+ 390   2                                                              // if( NumberOfSecondRadiatorOn == 0  )
+ 391   2                                                              // {
+ 392   2                                                                      // NumberOfSecondRadiatorOn += SECONDS_IN_HALF_AN_HOUR;
+ 393   2                                                              // }else
+ 394   2                                                                      // {
+ 395   2                                                                              // NumberOfSecondRadiatorOn += SECONDS_IN_HALF_AN_HOUR;
+ 396   2                                                                              // if(NumberOfSecondRadiatorOn%SECONDS_IN_HALF_AN_HOUR != 0 )   
+ 397   2                                                                                      // NumberOfSecondRadiatorOn = (NumberOfSecondRadiatorOn/SECONDS_IN_HALF_AN_HOUR + 1)*(SECONDS_IN
+             -_HALF_AN_HOUR);
+ 398   2                                                                      // }                                    
+ 399   2                                                      // }
+ 400   2                              // }
+ 401   2      
+ 402   2                              // if(ButtonMinusState == PRESSED)
+ 403   2                              // {
+ 404   2                                      // ButtonMinusState = RELEASED;
+ 405   2      
+ 406   2                                      // if(NumberOfSecondRadiatorOn < SECONDS_IN_HALF_AN_HOUR) 
+ 407   2                                              // {NumberOfSecondRadiatorOn = 0;}
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 8   
+
+ 408   2                                              // else
+ 409   2                                                      // {
+ 410   2                                                              // NumberOfSecondRadiatorOn -= SECONDS_IN_HALF_AN_HOUR;
+ 411   2                                                              // if(NumberOfSecondRadiatorOn%(30*60) != 0 )
+ 412   2                                                              // {
+ 413   2                                                                      // NumberOfSecondRadiatorOn = (NumberOfSecondRadiatorOn/(30*60) + 1)*(30*60);
+ 414   2                                                              // }
+ 415   2                                                      // }
+ 416   2      
+ 417   2                              // }
+ 418   2                              
+ 419   2                              // DisplayBlinkingTimer(NumberOfSecondRadiatorOn);
+ 420   2                      
+ 421   2      // /*           //------------Code for test NumberOfSecondRadiatorOn mechanism------------------------
+ 422   2                              // LedDigitControl(1, LED_DIGIT_ON        , NumberOfSecondRadiatorOn%3600/1000);
+ 423   2                              // LedDigitControl(2, LED_DIGIT_ON   , NumberOfSecondRadiatorOn%3600/100%10);
+ 424   2                              // LedDigitControl(3, LED_DIGIT_ON        ,     NumberOfSecondRadiatorOn%3600/10%10);
+ 425   2                              // LedDigitControl(4, LED_DIGIT_ON        , NumberOfSecondRadiatorOn%3600%10);
+ 426   2                      // //--------------End of testing code----------------------------------------------
+ 427   2       // */          
+ 428   2                              // // Transition condition of next state                        
+ 429   2                              // if(ButtonSelectState == PRESSED)
+ 430   2                              // {
+ 431   2                                      // UserInputState = USER_INPUT_STATE_SET_TEMPERATURE;
+ 432   2                                      // ButtonSelectState = RELEASED;
+ 433   2                              // }
+ 434   2      
+ 435   2                              // if(IdleButtonTime == SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME)
+ 436   2                              // {
+ 437   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 438   2                                      // IdleButtonTime = 0;
+ 439   2                              // }
+ 440   2                              
+ 441   2                              // break;
+ 442   2                      // }// end of case USER_INPUT_STATE_SET_TIME
+ 443   2      
+ 444   2                      // case USER_INPUT_STATE_SET_TEMPERATURE:
+ 445   2                      // {
+ 446   2                              // // Action to be done in this state
+ 447   2                              // // If value of temperature is greater than MAXIMUM_TEMPERATURE_SET, it will be set to MAXIMUM_TEMPER
+             -ATURE_SET.
+ 448   2                              // if(TemperatureSet >= MAXIMUM_TEMPERATURE_SET) TemperatureSet = MAXIMUM_TEMPERATURE_SET;
+ 449   2                              
+ 450   2                              // if(ButtonPlusState == PRESSED)
+ 451   2                              // {
+ 452   2                                      // ButtonPlusState = RELEASED; 
+ 453   2                                      // if(TemperatureSet != MAXIMUM_TEMPERATURE_SET) TemperatureSet++;
+ 454   2                              // }
+ 455   2      
+ 456   2                              // if(ButtonMinusState == PRESSED)
+ 457   2                              // {
+ 458   2                                      // ButtonMinusState = RELEASED;
+ 459   2                                      // if(TemperatureSet != MINIMUM_TEMPERATURE_SET) TemperatureSet--;
+ 460   2                              // }
+ 461   2                              
+ 462   2                              // DisplayBlinkingTemperature(TemperatureSet);
+ 463   2                              
+ 464   2                              // // Transition condition of next state                                        
+ 465   2                              // if(ButtonSelectState == PRESSED)
+ 466   2                              // {
+ 467   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 468   2                                      // ButtonSelectState = RELEASED;
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 9   
+
+ 469   2                              // }
+ 470   2      
+ 471   2                              // if(IdleButtonTime == SETTING_STATE_TO_NORMAL_DISPLAY_STATE_TIME)
+ 472   2                              // {
+ 473   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 474   2                                      // IdleButtonTime = 0;
+ 475   2                              // }                    
+ 476   2      
+ 477   2                              // break;
+ 478   2                      // }// end of case USER_INPUT_STATE_SET_TEMPERATURE
+ 479   2      
+ 480   2                      // case USER_INPUT_STATE_IDLE:
+ 481   2                      // {
+ 482   2                              // // Action to be done in this state
+ 483   2                              // TurnOffLedDisplay();
+ 484   2                              
+ 485   2                              // // Transition condition of next state        
+ 486   2                              // if(ButtonSelectState == PRESSED)
+ 487   2                              // {
+ 488   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 489   2                                      // ButtonSelectState = RELEASED;
+ 490   2                              // }                            
+ 491   2                              // if(ButtonPlusState == PRESSED)
+ 492   2                              // {
+ 493   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 494   2                                      // ButtonPlusState = RELEASED;
+ 495   2                              // }
+ 496   2                              // if(ButtonMinusState == PRESSED)
+ 497   2                              // {
+ 498   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 499   2                                      // ButtonMinusState = RELEASED;
+ 500   2                              // }
+ 501   2                              // if(ButtonAltState == PRESSED)
+ 502   2                              // {
+ 503   2                                      // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 504   2                                      // ButtonAltState = RELEASED;
+ 505   2                              // }
+ 506   2                              // break;
+ 507   2                      // }// end of case USER_INPUT_STATE_IDLE                        
+ 508   2      
+ 509   2                      // default:
+ 510   2                      // {
+ 511   2                              // UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 512   2                              // break;
+ 513   2                      // }
+ 514   2                      
+ 515   2              // }// end of switch(UserInputState)
+ 516   2      
+ 517   2              
+ 518   2              
+ 519   2       
+ 520   2              
+ 521   2      
+ 522   2       }// end of while(1) loop
+ 523   1       
+ 524   1      
+ 525   1       return(0);
+ 526   1      } // end of int main(void)
+ 527          
+ 528          
+ 529          
+ 530          
+C51 COMPILER V7.06   MAIN                                                                  09/22/2014 14:16:42 PAGE 10  
+
+ 531          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    379    ----
+   CONSTANT SIZE    =     26    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     17       6
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       2
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

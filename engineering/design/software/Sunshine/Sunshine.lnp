@@ -1,0 +1,9 @@
+"STARTUP.obj",
+"led_display_high_level_driver.obj",
+"main.obj",
+"stepper_high_level_driver.obj",
+"timer_interrupt.obj",
+"power_manager.obj" 
+TO "Sunshine" 
+RAMSIZE(256) 
+CODE( 0X0000-0X1FFF )

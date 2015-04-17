@@ -1,0 +1,392 @@
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE PLUS_MINUS_LED_NUMBER
+OBJECT MODULE PLACED IN plus_minus_LED_number.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE plus_minus_LED_number.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #define uint unsigned int
+   4          #define uchar unsigned char
+   5          
+   6          #define INTERRUPT_ON                                            1
+   7          #define INTERRUPT_OFF                                           0 
+   8          #define TMOD_TIMER0_16BIT_TIMER1_16BIT                  0x11  
+   9          // CYCLE_FOR_TIMER1_UNDER_11_0952MHZ (5ms)= (5000us)/(1/11.0592 us/clock)/12 clock/machine_cycle = 5000*11
+             -.0592/12=4608    
+  10          #define CYCLE_FOR_TIMER1_UNDER_11_0952MHZ       4608  
+  11          
+  12          
+  13          #define TEST_LED_ON        0
+  14          #define TEST_LED_OFF   1
+  15          
+  16          #define LED_DIGIT_ON     1
+  17          #define LED_DIGIT_OFF    0
+  18          
+  19          #define DEBOUNCED_TIME 10
+  20          #define UNDEFINED_DEBOUNCE_TIME 99
+  21          // The button debounce time is 10ms, timer1 interrupt happened every 5ms, and therefore BUTTON_DEBOUNCE_TI
+             -ME_FOR_TIMER1 is 2 here.
+  22          #define BUTTON_DEBOUNCE_TIME_FOR_TIMER1 2 
+  23          
+  24          #define RELEASED           1
+  25          #define PRESSED            0
+  26          #define TEST_LED_ON        0
+  27          #define TEST_LED_OFF   1
+  28          #define DIGIT_H        16
+  29          
+  30          
+  31          #define RADIATOR_MAX_HOURS 12
+  32          
+  33          #define YES 1
+  34          #define NO  0
+  35          
+  36          sbit LedDigit1Switch=P1^0;
+  37          sbit LedDigit2Switch=P1^1;
+  38          sbit LedDigit3Switch=P1^2;
+  39          sbit LedDigit4Switch=P1^3;
+  40          
+  41          sfr  LedDigitDisplay = 0xA0; //P2 declearation
+  42          
+  43          sbit TestLedState        = P3^7;
+  44          
+  45          unsigned char LedDigit1 = 8;
+  46          unsigned char LedDigit2 = 8;
+  47          unsigned char LedDigit3 = 8;
+  48          unsigned char LedDigit4 = 8;
+  49          unsigned char LedDigit1En = LED_DIGIT_OFF;
+  50          unsigned char LedDigit2En = LED_DIGIT_OFF;
+  51          unsigned char LedDigit3En = LED_DIGIT_OFF;
+  52          unsigned char LedDigit4En = LED_DIGIT_OFF;
+  53          unsigned char DigitNumber = 1;
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 2   
+
+  54          
+  55          sbit ButtonMinus         = P1^4;
+  56          sbit ButtonPlus          = P1^5;
+  57          sbit ButtonSelect        = P1^6;
+  58          sbit ButtonAlt           = P1^7;
+  59          
+  60          
+  61          unsigned char ButtonMinusState    =      RELEASED;
+  62          unsigned char ButtonPlusState     =      RELEASED;
+  63          unsigned char ButtonSelectState   =      RELEASED;
+  64          unsigned char ButtonAltState      =      RELEASED;
+  65          
+  66          unsigned char ButtonPlusDebounceTime    = UNDEFINED_DEBOUNCE_TIME;
+  67          unsigned char ButtonMinusDebounceTime   = UNDEFINED_DEBOUNCE_TIME;
+  68          unsigned char ButtonSelectDebounceTime  = UNDEFINED_DEBOUNCE_TIME;
+  69          unsigned char ButtonAltDebounceTime     = UNDEFINED_DEBOUNCE_TIME;
+  70          
+  71          unsigned char ButtonPlusDebounced               = NO;
+  72          unsigned char ButtonMinusDebounced      = NO;
+  73          unsigned char ButtonSelectDebounced     = NO;
+  74          unsigned char ButtonAltDebounced                = NO;
+  75          
+  76          
+  77          const unsigned char LedDisplayTable[]={~0x3f,~0x06,~0x5b,~0x4f,~0x66,~0x6d,~0x7d,               // Table for 7-segm
+             -ent LED to display 0-F,h
+  78                                  ~0x07,~0x7f,~0x6f,~0x77,~0x7c,~0x39,~0x5e,~0x79,~0x71,~0x74};
+  79          
+  80          
+  81          unsigned char RadiatorOnTime = 0;
+  82          unsigned char TimerTenthsDigit = 0;
+  83          unsigned char TimerUnitsDigit = 0;
+  84          unsigned char TimerTensDigit = 0;
+  85          
+  86          
+  87          
+  88          /******************************************************************/
+  89          /*                   main                                       */
+  90          /******************************************************************/
+  91          int main()
+  92          {
+  93   1      
+  94   1       
+  95   1          LedDigit1En = LED_DIGIT_OFF;
+  96   1          LedDigit2En = LED_DIGIT_OFF;
+  97   1          LedDigit3En = LED_DIGIT_OFF;
+  98   1          LedDigit4En = LED_DIGIT_OFF;
+  99   1              LedDigit1Switch = LED_DIGIT_OFF;
+ 100   1              LedDigit2Switch = LED_DIGIT_OFF;
+ 101   1              LedDigit3Switch = LED_DIGIT_OFF;
+ 102   1              LedDigit4Switch = LED_DIGIT_OFF;
+ 103   1      
+ 104   1              
+ 105   1              // Timers interrupt initialisations 
+ 106   1              EA   = INTERRUPT_ON;
+ 107   1              TMOD = TMOD_TIMER0_16BIT_TIMER1_16BIT;
+ 108   1      
+ 109   1          ET1  = INTERRUPT_ON;
+ 110   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 111   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 112   1              TR1  = INTERRUPT_ON;
+ 113   1              
+ 114   1              
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 3   
+
+ 115   1              
+ 116   1              
+ 117   1              
+ 118   1       while(1)
+ 119   1       {
+ 120   2       
+ 121   2              TimerTensDigit  = RadiatorOnTime%100/10;
+ 122   2              TimerUnitsDigit = RadiatorOnTime%10;
+ 123   2          TimerTenthsDigit = 5;
+ 124   2       
+ 125   2       
+ 126   2          LedDigit1En = LED_DIGIT_ON;
+ 127   2              LedDigit1 = TimerTensDigit;
+ 128   2          LedDigit2En = LED_DIGIT_ON;
+ 129   2              LedDigit2 = TimerUnitsDigit;
+ 130   2          LedDigit3En = LED_DIGIT_ON;
+ 131   2              LedDigit3 = TimerTenthsDigit;
+ 132   2       
+ 133   2          LedDigit4En = LED_DIGIT_ON;
+ 134   2              LedDigit4 = DIGIT_H;
+ 135   2              
+ 136   2          
+ 137   2              if(ButtonPlusState == PRESSED)
+ 138   2              {
+ 139   3                      if(RadiatorOnTime <= RADIATOR_MAX_HOURS-1)
+ 140   3                      {
+ 141   4                              RadiatorOnTime++;
+ 142   4                      }else{RadiatorOnTime = RADIATOR_MAX_HOURS;}
+ 143   3                      
+ 144   3                      ButtonPlusState = RELEASED;
+ 145   3              }
+ 146   2              
+ 147   2              if(ButtonMinusState == PRESSED)
+ 148   2              {
+ 149   3                      if(RadiatorOnTime != 0)
+ 150   3                              RadiatorOnTime--;       
+ 151   3                      ButtonMinusState = RELEASED;
+ 152   3              }       
+ 153   2              
+ 154   2              
+ 155   2      
+ 156   2       }// end of while(1) loop
+ 157   1      
+ 158   1      
+ 159   1       return(0);
+ 160   1      }
+ 161          
+ 162          
+ 163          void Timer5ms_with_ID_timer1() interrupt 3
+ 164          {
+ 165   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 166   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theoret
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 167   1          TestLedState = TEST_LED_ON;
+ 168   1      
+ 169   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 170   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 171   1      
+ 172   1      /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+ 173   1        Description: Debouncing Plus button, Minus button, Select button, Alternative button.
+ 174   1        When any button is pressed, programme is going to confirm that it is pressed and 
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 4   
+
+ 175   1        it is not a noise as the button is being held for more than 10ms. 
+ 176   1        The programme will immediately recognise the button is pressed if it is not noise 
+ 177   1        and it will not recognise any continuous pressing, which means the count of pressing 
+ 178   1        this button will not increase until it is released and pressed again.
+ 179   1        Pressing multiple buttons in the same time will not interference each other as they were denounced indiv
+             -idually.
+ 180   1        and the result of pressing multiple buttons is predictable as the order of each button is pressed.
+ 181   1        --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+ 182   1        if(ButtonPlus == PRESSED)  
+ 183   1        {
+ 184   2              if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects but
+             -ton is pressed. ButtonPlusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 185   2              {       
+ 186   3                      ButtonPlusDebounceTime = 0;
+ 187   3              }else
+ 188   2                      {       
+ 189   3                              if(ButtonPlusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 190   3                              {
+ 191   4                                      ButtonPlusDebounceTime++;
+ 192   4                                      ButtonPlusDebounced = NO;
+ 193   4                              }               
+ 194   3                              if(ButtonPlusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 195   3                              {
+ 196   4                                      if(ButtonPlusDebounced == NO)
+ 197   4                                      {
+ 198   5                                              ButtonPlusState = PRESSED;
+ 199   5                                      }
+ 200   4                                      ButtonPlusDebounced = YES;
+ 201   4                              }
+ 202   3                      }// end of if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 203   2        }else
+ 204   1                      {
+ 205   2                              if(ButtonPlusDebounced == YES)
+ 206   2                              {
+ 207   3                                      ButtonPlusDebounced = NO;
+ 208   3                                      ButtonPlusDebounceTime = UNDEFINED_DEBOUNCE_TIME;       
+ 209   3                              }               
+ 210   2                      }// end of if(ButtonPlus == PRESSED) else
+ 211   1        
+ 212   1        if(ButtonMinus == PRESSED)  
+ 213   1        {
+ 214   2              if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects bu
+             -tton is pressed. ButtonMinusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 215   2              {       
+ 216   3                      ButtonMinusDebounceTime = 0;
+ 217   3              }else
+ 218   2                      {       
+ 219   3                              if(ButtonMinusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 220   3                              {
+ 221   4                                      ButtonMinusDebounceTime++;
+ 222   4                                      ButtonMinusDebounced = NO;
+ 223   4                              }               
+ 224   3                              if(ButtonMinusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 225   3                              {
+ 226   4                                      ButtonMinusDebounced = YES;
+ 227   4                                      ButtonMinusState = PRESSED;                             
+ 228   4                              }                               
+ 229   3                      }// end of if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 230   2        }else
+ 231   1                      {
+ 232   2                              if(ButtonMinusDebounced == YES)
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 5   
+
+ 233   2                              {
+ 234   3                                      ButtonMinusDebounced = NO;
+ 235   3                                      ButtonMinusDebounceTime = UNDEFINED_DEBOUNCE_TIME;
+ 236   3                              }               
+ 237   2                      }// end of if(ButtonMinus == PRESSED) else
+ 238   1       
+ 239   1        if(ButtonSelect == PRESSED)  
+ 240   1        {
+ 241   2              if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects b
+             -utton is pressed. ButtonSelectDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 242   2              {       
+ 243   3                      ButtonSelectDebounceTime = 0;
+ 244   3              }else
+ 245   2                      {       
+ 246   3                              if(ButtonSelectDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 247   3                              {
+ 248   4                                      ButtonSelectDebounceTime++;
+ 249   4                                      ButtonSelectDebounced = NO;
+ 250   4                              }               
+ 251   3                              if(ButtonSelectDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 252   3                              {
+ 253   4                                      ButtonSelectDebounced = YES;
+ 254   4                                      ButtonSelectState = PRESSED;
+ 255   4                              }                               
+ 256   3                      }// end of if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 257   2        }else
+ 258   1                      {
+ 259   2                              if(ButtonSelectDebounced == YES)
+ 260   2                              {
+ 261   3                                      ButtonSelectDebounced = NO;
+ 262   3                                      ButtonSelectDebounceTime = UNDEFINED_DEBOUNCE_TIME;
+ 263   3                              }               
+ 264   2                      }// end of if(ButtonSelect == PRESSED) else
+ 265   1       
+ 266   1        if(ButtonAlt == PRESSED)  
+ 267   1        {
+ 268   2              if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects butt
+             -on is pressed. ButtonAltDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 269   2              {       
+ 270   3                      ButtonAltDebounceTime = 0;
+ 271   3              }else
+ 272   2                      {       
+ 273   3                              if(ButtonAltDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 274   3                              {
+ 275   4                                      ButtonAltDebounceTime++;
+ 276   4                                      ButtonAltDebounced = NO;
+ 277   4                              }               
+ 278   3                              if(ButtonAltDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 279   3                              {
+ 280   4                                      ButtonAltDebounced = YES;
+ 281   4                                      ButtonAltState = PRESSED;
+ 282   4                              }                               
+ 283   3                      }// end of if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 284   2        }else
+ 285   1                      {
+ 286   2                              if(ButtonAltDebounced == YES)
+ 287   2                              {
+ 288   3                                      ButtonAltDebounced = NO;
+ 289   3                                      ButtonAltDebounceTime = UNDEFINED_DEBOUNCE_TIME;
+ 290   3                              }               
+ 291   2                      }// end of if(ButtonAlt == PRESSED) else
+ 292   1        
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 6   
+
+ 293   1       
+ 294   1      
+ 295   1              if( !((LedDigit1En == LED_DIGIT_OFF) && (LedDigit2En == LED_DIGIT_OFF) && (LedDigit3En == LED_DIGIT_OFF) 
+             -&& (LedDigit4En == LED_DIGIT_OFF)) )
+ 296   1              {
+ 297   2                      DigitNumber ++;
+ 298   2                      if (DigitNumber >= 5)
+ 299   2                              DigitNumber = 1;
+ 300   2                              
+ 301   2                      switch(DigitNumber)
+ 302   2                      {
+ 303   3                              case 1 :        LedDigitDisplay = LedDisplayTable [LedDigit1];
+ 304   3                                                      LedDigit4Switch = LED_DIGIT_OFF;
+ 305   3                                                      if(LedDigit1En == LED_DIGIT_ON) 
+ 306   3                                                              {LedDigit1Switch = LED_DIGIT_ON;}
+ 307   3                                                              else{LedDigit1Switch = LED_DIGIT_OFF;}
+ 308   3                                                      break;
+ 309   3                                                      
+ 310   3                              case 2 :        LedDigitDisplay = LedDisplayTable [LedDigit2];
+ 311   3                                                      LedDigit1Switch = LED_DIGIT_OFF;
+ 312   3                                                      if(LedDigit2En == LED_DIGIT_ON) 
+ 313   3                                                              {LedDigit2Switch = LED_DIGIT_ON;}
+ 314   3                                                              else{LedDigit2Switch = LED_DIGIT_OFF;}
+ 315   3                                                      break;
+ 316   3      
+ 317   3                              case 3 :        LedDigitDisplay = LedDisplayTable [LedDigit3];
+ 318   3                                                      LedDigit2Switch = LED_DIGIT_OFF;
+ 319   3                                                      if(LedDigit3En == LED_DIGIT_ON) 
+ 320   3                                                              {LedDigit3Switch = LED_DIGIT_ON;}
+ 321   3                                                              else{LedDigit3Switch = LED_DIGIT_OFF;}
+ 322   3                                                      break;
+ 323   3      
+ 324   3                              case 4 :        LedDigitDisplay = LedDisplayTable [LedDigit4];
+ 325   3                                                      LedDigit3Switch = LED_DIGIT_OFF;
+ 326   3                                                      if(LedDigit4En == LED_DIGIT_ON) 
+ 327   3                                                              {LedDigit4Switch = LED_DIGIT_ON;}
+ 328   3                                                              else{LedDigit4Switch = LED_DIGIT_OFF;}
+ 329   3                                                      break;                                          
+ 330   3                                              
+ 331   3                      }// end of switch(DigitNumber)
+ 332   2      
+ 333   2      
+ 334   2              }// end of if( (LedDigit1 == DIGIT_LED_OFF) && (LedDigit2 == DIGIT_LED_OFF) && (LedDigit3 == DIGIT_LED_OF
+             -F) && (LedDigit4 == DIGIT_LED_OFF) )
+ 335   1         
+ 336   1         
+ 337   1         
+ 338   1         
+ 339   1      
+ 340   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 341   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theorit
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 342   1              TestLedState = TEST_LED_OFF;
+ 343   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    477    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     42    ----
+C51 COMPILER V7.06   PLUS_MINUS_LED_NUMBER                                                 09/15/2014 11:24:06 PAGE 7   
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

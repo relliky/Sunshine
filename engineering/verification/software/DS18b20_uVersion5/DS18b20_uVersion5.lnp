@@ -1,0 +1,7 @@
+"STARTUP.obj",
+"led_display_high_level_driver.obj",
+"main.obj",
+"timer_interrupt.obj" 
+TO "DS18b20_uVersion5" 
+RAMSIZE(256) 
+CODE( 0X0000-0X1FFF )

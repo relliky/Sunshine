@@ -1,0 +1,50 @@
+C51 COMPILER V7.06   SOLENOID                                                              09/19/2014 00:05:01 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE SOLENOID
+OBJECT MODULE PLACED IN solenoid.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE solenoid.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include <reg52.h>
+   2          
+   3          
+   4          sbit P01 = P1^0;  
+   5          
+   6          
+   7          /******************************************************************/
+   8          /*                   delay                                        */
+   9          /******************************************************************/
+  10          void Delay(long i)
+  11          {
+  12   1       while(--i);
+  13   1      }
+  14          
+  15          /******************************************************************/
+  16          /*                   main                                       */
+  17          /******************************************************************/
+  18          
+  19          void main(void)
+  20          {
+  21   1              P01 = 0; 
+  22   1              Delay(30000);
+  23   1      
+  24   1              P01 = 1; 
+  25   1              Delay(30000);
+  26   1      
+  27   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     48    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

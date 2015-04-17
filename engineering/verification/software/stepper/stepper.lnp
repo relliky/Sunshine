@@ -1,0 +1,8 @@
+"STARTUP.obj",
+"main.obj",
+"timer_interrupt.obj",
+"led_display_high_level_driver.obj",
+"stepper_high_level_driver.obj" 
+TO "stepper" 
+RAMSIZE(256) 
+CODE( 0X0000-0X1FFF )

@@ -1,0 +1,147 @@
+BL51 BANKED LINKER/LOCATER V5.03                                                        09/22/2014  12:39:16  PAGE 1
+
+
+BL51 BANKED LINKER/LOCATER V5.03, INVOKED BY:
+C:\KEIL\C51\BIN\BL51.EXE .\STARTUP.obj, motor_timer_interrupt.obj TO Motor_timer_interrupt RAMSIZE (256) CODE (0X0000-0X
+>> 1FFF)
+
+
+MEMORY MODEL: SMALL
+
+
+INPUT MODULES INCLUDED:
+  .\STARTUP.obj (?C_STARTUP)
+  motor_timer_interrupt.obj (MOTOR_TIMER_INTERRUPT)
+  C:\KEIL\C51\LIB\C51S.LIB (?C_INIT)
+
+
+LINK MAP OF MODULE:  Motor_timer_interrupt (?C_STARTUP)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            -----------------------------------------------------
+
+            * * * * * * *   D A T A   M E M O R Y   * * * * * * *
+            REG     0000H     0008H     ABSOLUTE     "REG BANK 0"
+            DATA    0008H     0002H     UNIT         ?DT?MOTOR_TIMER_INTERRUPT
+            IDATA   000AH     0001H     UNIT         ?STACK
+
+            * * * * * * *   C O D E   M E M O R Y   * * * * * * *
+            CODE    0000H     0003H     ABSOLUTE     
+            CODE    0003H     0011H     UNIT         ?PR?MAIN?MOTOR_TIMER_INTERRUPT
+            CODE    0014H     0005H     UNIT         ?C_INITSEG
+                    0019H     0002H                  *** GAP ***
+            CODE    001BH     0003H     ABSOLUTE     
+            CODE    001EH     008CH     UNIT         ?C_C51STARTUP
+            CODE    00AAH     002DH     UNIT         ?PR?TIMER5MS?MOTOR_TIMER_INTERRUPT
+            CODE    00D7H     0008H     UNIT         ?CO?MOTOR_TIMER_INTERRUPT
+
+
+
+OVERLAY MAP OF MODULE:   Motor_timer_interrupt (?C_STARTUP)
+
+
+SEGMENT
+  +--> CALLED SEGMENT
+---------------------
+?C_C51STARTUP
+  +--> ?PR?MAIN?MOTOR_TIMER_INTERRUPT
+  +--> ?C_INITSEG
+
+*** NEW ROOT ***************************************************
+
+?PR?TIMER5MS?MOTOR_TIMER_INTERRUPT
+  +--> ?CO?MOTOR_TIMER_INTERRUPT
+
+
+
+SYMBOL TABLE OF MODULE:  Motor_timer_interrupt (?C_STARTUP)
+
+  VALUE           TYPE          NAME
+  ----------------------------------
+BL51 BANKED LINKER/LOCATER V5.03                                                      09/22/2014  12:39:16  PAGE 2
+
+
+
+  -------         MODULE        ?C_STARTUP
+  C:001EH         SEGMENT       ?C_C51STARTUP
+  I:000AH         SEGMENT       ?STACK
+  C:0000H         PUBLIC        ?C_STARTUP
+  D:00E0H         SYMBOL        ACC
+  D:00F0H         SYMBOL        B
+  D:0083H         SYMBOL        DPH
+  D:0082H         SYMBOL        DPL
+  N:0000H         SYMBOL        IBPSTACK
+  N:0100H         SYMBOL        IBPSTACKTOP
+  N:0080H         SYMBOL        IDATALEN
+  C:0021H         SYMBOL        IDATALOOP
+  N:0000H         SYMBOL        PBPSTACK
+  N:0000H         SYMBOL        PBPSTACKTOP
+  N:0000H         SYMBOL        PDATALEN
+  N:0000H         SYMBOL        PDATASTART
+  N:0000H         SYMBOL        PPAGE
+  N:0000H         SYMBOL        PPAGEENABLE
+  D:00A0H         SYMBOL        PPAGE_SFR
+  D:0081H         SYMBOL        SP
+  C:001EH         SYMBOL        STARTUP1
+  N:0000H         SYMBOL        XBPSTACK
+  N:0000H         SYMBOL        XBPSTACKTOP
+  N:0000H         SYMBOL        XDATALEN
+  N:0000H         SYMBOL        XDATASTART
+  C:0000H         LINE#         92
+  C:001EH         LINE#         99
+  C:0020H         LINE#         100
+  C:0021H         LINE#         101
+  C:0022H         LINE#         102
+  C:0024H         LINE#         151
+  C:0027H         LINE#         155
+  -------         ENDMOD        ?C_STARTUP
+
+  -------         MODULE        MOTOR_TIMER_INTERRUPT
+  C:0000H         SYMBOL        _ICE_DUMMY_
+  D:0090H         PUBLIC        P1
+  D:00B0H         PUBLIC        P3
+  B:00A8H.7       PUBLIC        EA
+  D:00A8H         PUBLIC        IE
+  D:00B8H         PUBLIC        IP
+  C:0003H         PUBLIC        main
+  D:0098H         PUBLIC        SCON
+  D:0089H         PUBLIC        TMOD
+  D:0088H         PUBLIC        TCON
+  C:00AAH         PUBLIC        timer5ms
+  B:00A8H.3       PUBLIC        ET1
+  D:008DH         PUBLIC        TH1
+  D:008BH         PUBLIC        TL1
+  B:0088H.6       PUBLIC        TR1
+  D:00C8H         PUBLIC        T2CON
+  D:0008H         PUBLIC        k
+  C:00DBH         PUBLIC        B_Rotation
+  D:00D0H         PUBLIC        PSW
+  C:00D7H         PUBLIC        F_Rotation
+  -------         PROC          MAIN
+BL51 BANKED LINKER/LOCATER V5.03                                                      09/22/2014  12:39:16  PAGE 3
+
+
+  C:0003H         LINE#         36
+  C:0003H         LINE#         37
+  C:0003H         LINE#         41
+  C:0005H         LINE#         42
+  C:0008H         LINE#         44
+  C:000AH         LINE#         45
+  C:000DH         LINE#         46
+  C:0010H         LINE#         47
+  C:0012H         LINE#         49
+  -------         ENDPROC       MAIN
+  -------         PROC          TIMER5MS
+  C:00AAH         LINE#         66
+  C:00B0H         LINE#         72
+  C:00B3H         LINE#         73
+  C:00B6H         LINE#         75
+  C:00BEH         LINE#         76
+  C:00C8H         LINE#         78
+  C:00D0H         LINE#         80
+  -------         ENDPROC       TIMER5MS
+  -------         ENDMOD        MOTOR_TIMER_INTERRUPT
+
+Program Size: data=11.0 xdata=0 code=221
+LINK/LOCATE RUN COMPLETE.  0 WARNING(S),  0 ERROR(S)

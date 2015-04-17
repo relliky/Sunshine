@@ -1,0 +1,171 @@
+BL51 BANKED LINKER/LOCATER V5.03                                                        09/12/2014  08:58:45  PAGE 1
+
+
+BL51 BANKED LINKER/LOCATER V5.03, INVOKED BY:
+C:\KEIL\C51\BIN\BL51.EXE .\STARTUP.obj, keypad.obj TO keypad RAMSIZE (256)
+
+
+MEMORY MODEL: SMALL
+
+
+INPUT MODULES INCLUDED:
+  .\STARTUP.obj (?C_STARTUP)
+  keypad.obj (KEYPAD)
+  C:\KEIL\C51\LIB\C51S.LIB (?C_INIT)
+
+
+LINK MAP OF MODULE:  keypad (?C_STARTUP)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            -----------------------------------------------------
+
+            * * * * * * *   D A T A   M E M O R Y   * * * * * * *
+            REG     0000H     0008H     ABSOLUTE     "REG BANK 0"
+            DATA    0008H     000EH     UNIT         ?DT?KEYPAD
+            IDATA   0016H     0001H     UNIT         ?STACK
+
+            * * * * * * *   C O D E   M E M O R Y   * * * * * * *
+            CODE    0000H     0003H     ABSOLUTE     
+            CODE    0003H     008CH     UNIT         ?C_C51STARTUP
+            CODE    008FH     004AH     UNIT         ?PR?MAIN?KEYPAD
+            CODE    00D9H     0039H     UNIT         ?PR?SCANKEYS?KEYPAD
+            CODE    0112H     0032H     UNIT         ?PR?_DELAY1MS?KEYPAD
+            CODE    0144H     0011H     UNIT         ?C_INITSEG
+
+
+
+OVERLAY MAP OF MODULE:   keypad (?C_STARTUP)
+
+
+SEGMENT
+  +--> CALLED SEGMENT
+---------------------
+?C_C51STARTUP
+  +--> ?PR?MAIN?KEYPAD
+  +--> ?C_INITSEG
+
+?PR?MAIN?KEYPAD
+  +--> ?PR?SCANKEYS?KEYPAD
+  +--> ?PR?_DELAY1MS?KEYPAD
+
+?PR?SCANKEYS?KEYPAD
+  +--> ?PR?_DELAY1MS?KEYPAD
+
+
+
+SYMBOL TABLE OF MODULE:  keypad (?C_STARTUP)
+
+  VALUE           TYPE          NAME
+  ----------------------------------
+
+BL51 BANKED LINKER/LOCATER V5.03                                                      09/12/2014  08:58:45  PAGE 2
+
+
+  -------         MODULE        ?C_STARTUP
+  C:0003H         SEGMENT       ?C_C51STARTUP
+  I:0016H         SEGMENT       ?STACK
+  C:0000H         PUBLIC        ?C_STARTUP
+  D:00E0H         SYMBOL        ACC
+  D:00F0H         SYMBOL        B
+  D:0083H         SYMBOL        DPH
+  D:0082H         SYMBOL        DPL
+  N:0000H         SYMBOL        IBPSTACK
+  N:0100H         SYMBOL        IBPSTACKTOP
+  N:0080H         SYMBOL        IDATALEN
+  C:0006H         SYMBOL        IDATALOOP
+  N:0000H         SYMBOL        PBPSTACK
+  N:0000H         SYMBOL        PBPSTACKTOP
+  N:0000H         SYMBOL        PDATALEN
+  N:0000H         SYMBOL        PDATASTART
+  N:0000H         SYMBOL        PPAGE
+  N:0000H         SYMBOL        PPAGEENABLE
+  D:00A0H         SYMBOL        PPAGE_SFR
+  D:0081H         SYMBOL        SP
+  C:0003H         SYMBOL        STARTUP1
+  N:0000H         SYMBOL        XBPSTACK
+  N:0000H         SYMBOL        XBPSTACKTOP
+  N:0000H         SYMBOL        XDATALEN
+  N:0000H         SYMBOL        XDATASTART
+  C:0000H         LINE#         92
+  C:0003H         LINE#         99
+  C:0005H         LINE#         100
+  C:0006H         LINE#         101
+  C:0007H         LINE#         102
+  C:0009H         LINE#         151
+  C:000CH         LINE#         155
+  -------         ENDMOD        ?C_STARTUP
+
+  -------         MODULE        KEYPAD
+  C:0000H         SYMBOL        _ICE_DUMMY_
+  D:0090H         PUBLIC        P1
+  D:00B0H         PUBLIC        P3
+  B:0090H.4       PUBLIC        ButtonMinus
+  D:0008H         PUBLIC        ButtonMinusState
+  B:0090H.7       PUBLIC        ButtonAlt
+  C:00D9H         PUBLIC        ScanKeys
+  C:008FH         PUBLIC        main
+  B:0090H.5       PUBLIC        ButtonPlus
+  D:000AH         PUBLIC        ButtonAltState
+  D:000CH         PUBLIC        ButtonPlusState
+  B:00B0H.7       PUBLIC        TestLedState
+  C:0116H         PUBLIC        _Delay1ms
+  B:0090H.6       PUBLIC        ButtonSelect
+  D:000EH         PUBLIC        i
+  D:0010H         PUBLIC        j
+  D:0012H         PUBLIC        ButtonSelectState
+  D:0014H         PUBLIC        k
+  C:0112H         SYMBOL        L?0026
+  -------         PROC          L?0025
+  -------         ENDPROC       L?0025
+  C:0112H         SYMBOL        L?0026
+BL51 BANKED LINKER/LOCATER V5.03                                                      09/12/2014  08:58:45  PAGE 3
+
+
+  -------         PROC          _DELAY1MS
+  D:0006H         SYMBOL        i
+  C:0116H         LINE#         31
+  C:0116H         LINE#         32
+  C:0116H         LINE#         33
+  C:0125H         LINE#         34
+  C:0143H         LINE#         35
+  -------         ENDPROC       _DELAY1MS
+  -------         PROC          SCANKEYS
+  C:00D9H         LINE#         40
+  C:00D9H         LINE#         41
+  C:00D9H         LINE#         42
+  C:00DFH         LINE#         43
+  C:00E7H         LINE#         45
+  C:00EDH         LINE#         46
+  C:00F5H         LINE#         48
+  C:00FBH         LINE#         49
+  C:0103H         LINE#         51
+  C:0109H         LINE#         52
+  C:0111H         LINE#         54
+  -------         ENDPROC       SCANKEYS
+  -------         PROC          MAIN
+  C:008FH         LINE#         56
+  C:008FH         LINE#         57
+  C:008FH         LINE#         60
+  C:008FH         LINE#         62
+  C:0092H         LINE#         64
+  C:00AAH         LINE#         65
+  C:00AAH         LINE#         66
+  C:00ACH         LINE#         67
+  C:00B3H         LINE#         70
+  C:00B9H         LINE#         71
+  C:00BFH         LINE#         72
+  C:00C5H         LINE#         73
+  C:00CBH         LINE#         75
+  C:00CDH         LINE#         76
+  C:00CFH         LINE#         77
+  C:00D1H         LINE#         78
+  C:00D3H         LINE#         81
+  C:00D5H         LINE#         82
+  C:00D7H         LINE#         83
+  C:00D7H         LINE#         84
+  -------         ENDPROC       MAIN
+  -------         ENDMOD        KEYPAD
+
+Program Size: data=23.0 xdata=0 code=341
+LINK/LOCATE RUN COMPLETE.  0 WARNING(S),  0 ERROR(S)

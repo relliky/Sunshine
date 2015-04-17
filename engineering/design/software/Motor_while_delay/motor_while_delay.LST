@@ -1,0 +1,113 @@
+C51 COMPILER V7.06   MOTOR_WHILE_DELAY                                                     09/22/2014 12:27:15 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE MOTOR_WHILE_DELAY
+OBJECT MODULE PLACED IN motor_while_delay.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE motor_while_delay.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include <reg52.h>
+   2          
+   3          /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+   4                  Timer Interrupt Macros
+   5           ---------------------------------------------------------------------------------------------------------
+             ------------------------------------*/
+   6          // Timer interrupt parameters
+   7          #define INTERRUPT_ON                                            1
+   8          #define INTERRUPT_OFF                                           0 
+   9          #define TMOD_TIMER0_16BIT_TIMER1_16BIT          0x11  
+  10          // CYCLE_FOR_TIMER1_UNDER_11_0952MHZ (5ms)= (5000us)/(1/11.0592 us/clock)/12 clock/machine_cycle = 5000*11
+             -.0592/12=4608   
+  11          #define CYCLE_FOR_TIMER1_UNDER_11_0952MHZ       4608 
+  12          // Count parameter for 1s 
+  13          #define COUNT_1S_FOR_5MS_TIMER                          200
+  14          // Count parameter for 5s 
+  15          #define COUNT_5S_FOR_1S_TIMER                           5
+  16          
+  17          
+  18          unsigned char code F_Rotation[]={0x20,0x10,0x08,0x04}; //forward 0010 0000£¬0001 0000£¬0000 1000£¬0000 010
+             -0
+  19          unsigned char code B_Rotation[4]={0x04,0x08,0x10,0x20}; //backward 0000 0100£¬0000 1000£¬0001 0000£¬0010 0
+             -000
+  20          
+  21          //unsigned char  LITAI[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+  22          
+  23          int k = 0;
+  24          
+  25          /******************************************************************/
+  26          /*                   delay                                   */
+  27          /******************************************************************/
+  28          void Delay(unsigned int i)
+  29          {
+  30   1       while(--i);
+  31   1      }
+  32          
+  33          /******************************************************************/
+  34          /*                   main                                       */
+  35          /******************************************************************/
+  36          main()
+  37          {
+  38   1        unsigned char i;
+  39   1      
+  40   1              // Timers interrupt initialisations 
+  41   1      /*      EA   = INTERRUPT_ON;
+  42   1              TMOD = TMOD_TIMER0_16BIT_TIMER1_16BIT;
+  43   1      
+  44   1          ET1  = INTERRUPT_ON;
+  45   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+  46   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+  47   1              TR1  = INTERRUPT_ON;
+  48   1       */
+  49   1      
+  50   1      
+C51 COMPILER V7.06   MOTOR_WHILE_DELAY                                                     09/22/2014 12:27:15 PAGE 2   
+
+  51   1       while(1)
+  52   1       {
+  53   2        for(i=0;i<4;i++)      //4 phase
+  54   2           {
+  55   3         
+  56   3           P3=B_Rotation[i];  
+  57   3      
+  58   3      //      P3 = LITAI[i];
+  59   3      
+  60   3           Delay(500);        //speed
+  61   3               }
+  62   2       }
+  63   1      }
+  64          
+  65          /* 
+  66          void timer5ms (void) interrupt 3 
+  67          {
+  68          
+  69          
+  70          
+  71                  
+  72                  TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+  73                  TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+  74          
+  75                  k++;
+  76                  if(k==4) k=0;
+  77          
+  78                  P3 = F_Rotation[k];
+  79          
+  80          }
+  81          
+  82          
+  83           */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     32    ----
+   CONSTANT SIZE    =      8    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      2    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

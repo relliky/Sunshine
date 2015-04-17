@@ -1,0 +1,112 @@
+C51 COMPILER V7.06   KEYPAD                                                                09/12/2014 08:58:45 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE KEYPAD
+OBJECT MODULE PLACED IN keypad.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE keypad.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          
+   2          #include<reg51.h>
+   3          #include <intrins.h>
+   4          
+   5          
+   6          #define uchar unsigned char
+   7          
+   8          #define DEBOUNCED_TIME 10
+   9          
+  10          #define RELEASED           1
+  11          #define PRESSED            0
+  12          #define TEST_LED_ON        0
+  13          #define TEST_LED_OFF   1
+  14          #define SHOWING_SUCCESS_TIME  1000
+  15          
+  16          sbit ButtonMinus         = P1^4;
+  17          sbit ButtonPlus          = P1^5;
+  18          sbit ButtonSelect        = P1^6;
+  19          sbit ButtonAlt           = P1^7;
+  20          
+  21          sbit TestLedState        = P3^7;
+  22          
+  23          unsigned int ButtonMinusState     =      RELEASED;
+  24          unsigned int ButtonPlusState      =      RELEASED;
+  25          unsigned int ButtonSelectState    =      RELEASED;
+  26          unsigned int ButtonAltState               =      RELEASED;
+  27          
+  28          unsigned int i,j,k;
+  29          
+  30          
+  31          void Delay1ms(unsigned int i)
+  32          {
+  33   1        for(j=i;j>0;j--)
+  34   1              for(k=125;k>0;k--);
+  35   1      }
+  36          
+  37          /*
+  38                  Description: Scan and debounce the keys in software for the minus button, plus button, select button, and
+             - alternative button.
+  39          */
+  40          void ScanKeys()
+  41          {
+  42   1        if(ButtonMinus == PRESSED)  Delay1ms(DEBOUNCED_TIME);
+  43   1        if(ButtonMinus == PRESSED)  ButtonMinusState = PRESSED;
+  44   1       
+  45   1        if(ButtonPlus == PRESSED)  Delay1ms(DEBOUNCED_TIME);
+  46   1        if(ButtonPlus == PRESSED)  ButtonPlusState = PRESSED;
+  47   1       
+  48   1        if(ButtonSelect == PRESSED)  Delay1ms(DEBOUNCED_TIME);
+  49   1        if(ButtonSelect == PRESSED)  ButtonSelectState = PRESSED;
+  50   1       
+  51   1        if(ButtonAlt == PRESSED)  Delay1ms(DEBOUNCED_TIME);
+  52   1        if(ButtonAlt == PRESSED)  ButtonAltState = PRESSED;
+  53   1       
+  54   1      }
+C51 COMPILER V7.06   KEYPAD                                                                09/12/2014 08:58:45 PAGE 2   
+
+  55          
+  56          void main()
+  57          {
+  58   1      
+  59   1      
+  60   1       while(1){
+  61   2       
+  62   2               ScanKeys();
+  63   2               
+  64   2               if ((ButtonMinusState == PRESSED) || (ButtonPlusState == PRESSED) || (ButtonSelectState == PRESSED) || (
+             -ButtonAltState == PRESSED) )
+  65   2               {
+  66   3                      TestLedState = TEST_LED_ON;
+  67   3                      Delay1ms(SHOWING_SUCCESS_TIME);
+  68   3      
+  69   3      
+  70   3                      ButtonMinusState = RELEASED;
+  71   3                      ButtonPlusState = RELEASED;
+  72   3                      ButtonSelectState = RELEASED;
+  73   3                      ButtonAltState = RELEASED;
+  74   3      
+  75   3                      ButtonMinus = RELEASED;
+  76   3                      ButtonPlus = RELEASED;
+  77   3                      ButtonSelect = RELEASED;
+  78   3                      ButtonAlt = RELEASED;
+  79   3                      
+  80   3                      
+  81   3           }else{
+  82   3                              TestLedState = TEST_LED_OFF;
+  83   3               }
+  84   2       }
+  85   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    181    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     14    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

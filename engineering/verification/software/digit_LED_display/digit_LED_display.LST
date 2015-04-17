@@ -1,0 +1,537 @@
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE DIGIT_LED_DISPLAY
+OBJECT MODULE PLACED IN digit_LED_display.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE digit_LED_display.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          // This will display on LED "36Co"
+   2          
+   3          #include <reg52.h>
+   4          #include <intrins.h>
+   5          #define uint unsigned int
+   6          #define uchar unsigned char
+   7          
+   8          #define INTERRUPT_ON                                            1
+   9          #define INTERRUPT_OFF                                           0 
+  10          #define TIMER0_16BIT_TIMER1_16BIT                       0x11  
+  11          // CYCLE_FOR_TIMER1_UNDER_11_0952MHZ (5ms)= (5000us)/(1/11.0592 us/clock)/12 clock/machine_cycle = 5000*11
+             -.0592/12=4608    
+  12          #define CYCLE_FOR_TIMER1_UNDER_11_0952MHZ       4608  
+  13          
+  14          
+  15          #define TEST_LED_ON        0
+  16          #define TEST_LED_OFF   1
+  17          
+  18          // 7-segment LED cathode inverted value, ON has to be 0x1, OFF has to be 0x0.
+  19          #define LED_DIGIT_OFF           0x0
+  20          #define LED_DIGIT_ON            0x1
+  21          #define LED_DIGIT_BLINK         0x2
+  22          #define LED_DIGIT_NOT_BLINK 0x3
+  23          
+  24          // LED blinks twice per 1s, which means LED needs to be enable and disable every 500ms, and the time betwe
+             -en enable and disable is 250ms, which is 50 times of 5ms timer interrupt
+  25          // N.B. LedBlinkTimer can never reach the value of UNDEFINED_BLINK_TIMER(set to 200 here), otherwise the p
+             -rogramme will regard the timer is undefined, i.e. blink function disabled while the blinking is actually running.
+  26          // Therefore there is LED_BLINK_TIME < UNDEFINED_BLINK_TIMER all the time.
+  27          // UNDEFINED_BLINK_TIMER cannot be over 127 since unsigned char is regarded with maximum value of 127 by t
+             -he compiler
+  28          #define LED_BLINK_TIME 25
+  29          #define UNDEFINED_BLINK_TIMER 120
+  30          
+  31          #define DIGIT_H        16
+  32          #define DIGIT_C        0xC
+  33          #define DIGIT_DEGREE   17
+  34          #define DECIMAL_NUMBER 18
+  35          #define NOTHING            28
+  36          
+  37          sbit LedDigit1Switch=P1^0;
+  38          sbit LedDigit2Switch=P1^1;
+  39          sbit LedDigit3Switch=P1^2;
+  40          sbit LedDigit4Switch=P1^3;
+  41          
+  42          sfr  LedDigitDisplay = 0xA0; //P2 declearation
+  43          
+  44          sbit TestLedState        = P3^7;
+  45          
+  46          unsigned char LedDigit1                 = 8;
+  47          unsigned char LedDigit2                 = 8;
+  48          unsigned char LedDigit3                 = 8;
+  49          unsigned char LedDigit4                 = 8;
+  50          unsigned char LedDigit1En               = LED_DIGIT_OFF;
+  51          unsigned char LedDigit2En               = LED_DIGIT_OFF;
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 2   
+
+  52          unsigned char LedDigit3En               = LED_DIGIT_OFF;
+  53          unsigned char LedDigit4En               = LED_DIGIT_OFF;
+  54          unsigned char DigitNumber               = 1;
+  55          unsigned int LedBlinkTimer      = UNDEFINED_BLINK_TIMER;
+  56          unsigned char LedDigit1BlinkEn  = LED_DIGIT_NOT_BLINK;
+  57          unsigned char LedDigit2BlinkEn  = LED_DIGIT_NOT_BLINK;
+  58          unsigned char LedDigit3BlinkEn  = LED_DIGIT_NOT_BLINK;
+  59          unsigned char LedDigit4BlinkEn  = LED_DIGIT_NOT_BLINK;
+  60          unsigned char LastCycleOfLedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+  61          unsigned char LastCycleOfLedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+  62          unsigned char LastCycleOfLedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+  63          unsigned char LastCycleOfLedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+  64          unsigned char LedDigit1State    = LED_DIGIT_OFF;
+  65          unsigned char LedDigit2State    = LED_DIGIT_OFF;
+  66          unsigned char LedDigit3State    = LED_DIGIT_OFF;
+  67          unsigned char LedDigit4State    = LED_DIGIT_OFF;
+  68          unsigned char BlinkReferenceLedState = 0x3;
+  69          
+  70          
+  71          const unsigned char LedDisplayTable[]={~0x3f,~0x06,~0x5b,~0x4f,~0x66,~0x6d,~0x7d,               // Table for 7-segm
+             -ent LED to display 0-F,h,o(degree),"0." "1." "2." "3." "4." "5." "6." "7." "8." "9." and OFF.
+  72                                                                  ~0x07,~0x7f,~0x6f,~0x77,~0x7c,~0x39,~0x5e,~0x79,~0x71,
+  73                                                                  ~0x74,~0x63,
+  74                                                                  ~(0x3f+0x80),~(0x06+0x80),~(0x5b+0x80),~(0x4f+0x80),
+  75                                                                  ~(0x66+0x80),~(0x6d+0x80),~(0x7d+0x80),~(0x07+0x80),
+  76                                                                  ~(0x7f+0x80),~(0x6f+0x80),
+  77                                                                  ~(0x00)};
+  78          
+  79          
+  80          int ind = 0;
+  81          
+  82          int test_slow_counter = 0;
+  83          
+  84          void LedDigitControl(unsigned char LedDigitNumber, unsigned char LedDigitState, unsigned char LedDigitChar
+             -);
+  85          
+  86          /******************************************************************/
+  87          /*                   main                                       */
+  88          /******************************************************************/
+  89          int main(void)
+  90          {
+  91   1      
+  92   1       
+  93   1              long  time_t;
+  94   1      //      double int flag_t;    
+  95   1      
+  96   1      
+  97   1              LedDigit1En = LED_DIGIT_OFF;
+  98   1              LedDigit2En = LED_DIGIT_OFF;
+  99   1              LedDigit3En = LED_DIGIT_OFF;
+ 100   1              LedDigit4En = LED_DIGIT_OFF;
+ 101   1              LedDigit1Switch = LED_DIGIT_OFF;
+ 102   1              LedDigit2Switch = LED_DIGIT_OFF;
+ 103   1              LedDigit3Switch = LED_DIGIT_OFF;
+ 104   1              LedDigit4Switch = LED_DIGIT_OFF;
+ 105   1      
+ 106   1              
+ 107   1              // Timers interrupt initialisations 
+ 108   1              EA   = INTERRUPT_ON;
+ 109   1              TMOD = TIMER0_16BIT_TIMER1_16BIT;
+ 110   1      
+ 111   1        ET1  = INTERRUPT_ON;
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 3   
+
+ 112   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/256;  // CYCLE_FOR_10MS_UNDER_11_0952MHZ = (10000us)/
+             -(1/11.0592 us/clock)/12 clock/machine_cycle = 10000*11.0592/12=9216 
+ 113   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%256;
+ 114   1              TR1  = INTERRUPT_ON;
+ 115   1              
+ 116   1              
+ 117   1              
+ 118   1              
+ 119   1              
+ 120   1       while(1)
+ 121   1       {
+ 122   2      //    LedDigit1En = LED_DIGIT_ON;
+ 123   2      //       LedDigit1 = DIGIT_H;
+ 124   2      //    LedDigit2En = LED_DIGIT_ON;
+ 125   2      //      LedDigit2 = DIGIT_DEGREE;
+ 126   2      //   LedDigit3En = LED_DIGIT_ON;
+ 127   2      //      LedDigit3 = DIGIT_C;
+ 128   2      //   LedDigit4En = LED_DIGIT_ON;
+ 129   2      //      LedDigit4 = (DECIMAL_NUMBER+5);
+ 130   2              
+ 131   2      //      LedDigit1BlinkEn = LED_DIGIT_BLINK;
+ 132   2      //      LedDigit2BlinkEn = LED_DIGIT_BLINK;
+ 133   2      //      LedDigit3BlinkEn = LED_DIGIT_BLINK;
+ 134   2      
+ 135   2              /*      All of the trasitions have to be tested. 
+ 136   2                      OFF -> Blink -> OFF, 
+ 137   2                      ON -> Blink -> ON, 
+ 138   2                      ON -> OFF -> ON
+ 139   2              */
+ 140   2              for(time_t = 0;  time_t<0xFFFF/2*50; time_t++ )
+ 141   2              {
+ 142   3                      if(time_t >0xFFFF/4*50)
+ 143   3                      {
+ 144   4                              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING             );
+ 145   4                              LedDigitControl(2, LED_DIGIT_ON   , 2                   );
+ 146   4                              LedDigitControl(3, LED_DIGIT_ON   , 7                   );
+ 147   4                              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING             );
+ 148   4                      }else
+ 149   3                      {
+ 150   4                              LedDigitControl(1, LED_DIGIT_BLINK, 4                   );
+ 151   4                              LedDigitControl(2, LED_DIGIT_BLINK, 5                   );
+ 152   4                              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING             );
+ 153   4                              LedDigitControl(4, LED_DIGIT_BLINK, 2                   );
+ 154   4                      }
+ 155   3              
+ 156   3              }
+ 157   2      
+ 158   2       
+ 159   2       
+ 160   2              // 4 ON -> Blink -> ON, 
+ 161   2      /*      for(time_t = 0;  time_t<0xFFFF/2*50; time_t++ )
+ 162   2              {
+ 163   2                      if(time_t >0xFFFF/4*50)
+ 164   2                      {
+ 165   2                              LedDigitControl(1, LED_DIGIT_ON  , 1            );
+ 166   2                              LedDigitControl(2, LED_DIGIT_ON   , 2                   );
+ 167   2                              LedDigitControl(3, LED_DIGIT_ON   , 3                   );
+ 168   2                              LedDigitControl(4, LED_DIGIT_ON   , 4           );
+ 169   2                      }else
+ 170   2                      {
+ 171   2                              LedDigitControl(1, LED_DIGIT_BLINK, 5                   );
+ 172   2                              LedDigitControl(2, LED_DIGIT_BLINK, 6                   );
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 4   
+
+ 173   2                              LedDigitControl(3, LED_DIGIT_BLINK  , 7         );
+ 174   2                              LedDigitControl(4, LED_DIGIT_BLINK, 8                   );
+ 175   2                      }
+ 176   2              
+ 177   2              }
+ 178   2       */
+ 179   2       
+ 180   2      /*      LedDigitControl(1, LED_DIGIT_BLINK, 3                   );
+ 181   2              LedDigitControl(2, LED_DIGIT_BLINK, 6                   );
+ 182   2              LedDigitControl(3, LED_DIGIT_ON   , DIGIT_C             );
+ 183   2              LedDigitControl(4, LED_DIGIT_ON   , DIGIT_DEGREE);
+ 184   2       */     
+ 185   2      /*      
+ 186   2                              LedDigitControl(2, LED_DIGIT_BLINK, 1                   );
+ 187   2                              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING     );
+ 188   2                              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING     );
+ 189   2                              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING     );
+ 190   2       */
+ 191   2       }// end of while(1) loop
+ 192   1      
+ 193   1      }
+ 194          
+ 195          /*
+ 196                  Description: Changing a state of a LED digit
+ 197                  Input:           unsigned char LedDigitNumber , i.e. which LED digit is controlled by this function)
+ 198                               unsigned char LedDigitChar   , i.e. what character is sent to this digit
+ 199                                           unsigned char LedDigitState  , i.e. what state is for this LED digit: ON/OFF/BLINK
+ 200                  N.B. For some reason, Keil uVersion2 does not compile one of the assignment to assembly even though there
+             - is no any brunch before.
+ 201                           Therefore, when using Keil to simulate the program running, breakpoints cannot be set at these assignme
+             -nts in C.                 
+ 202                           More specifically, LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK; in the LedDigitState == LED_DIGIT_ON is not 
+             -regarded as compiled, which means there is no correlated assembly code there and hence an user cannot set a breakpoint t
+             -here..
+ 203                           And therefore LED display could not display well when digit state changed from ON/OFF to blink or other
+             -wise.
+ 204                           Solution is an update of the compiler. Using latest version of Keil solved the issue of code not gettin
+             -g compiled, i.e. Keil uVersion5.
+ 205          
+ 206          */
+ 207          
+ 208          void LedDigitControl(unsigned char LedDigitNumber, unsigned char LedDigitState, unsigned char LedDigitChar
+             -)
+ 209          {
+ 210   1      /*      switch(LedDigitNumber)
+ 211   1              {
+ 212   1                      case 1:
+ 213   1                                      breaks;
+ 214   1              
+ 215   1              
+ 216   1              }// end of switch(LedDigitNumber)
+ 217   1              
+ 218   1       */
+ 219   1              switch(LedDigitNumber)
+ 220   1              {
+ 221   2                      case 1:
+ 222   2                              {
+ 223   3                                      LedDigit1 = LedDigitChar;
+ 224   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 225   3                                      {
+ 226   4                                              LedDigit1BlinkEn = LED_DIGIT_BLINK;
+ 227   4                                      }
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 5   
+
+ 228   3                                              
+ 229   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 230   3                                      {
+ 231   4                                              LedDigit1En = LED_DIGIT_ON;
+ 232   4                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 233   4                                      }
+ 234   3                                      
+ 235   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 236   3                                      {
+ 237   4                                              LedDigit1En = LED_DIGIT_OFF;
+ 238   4                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 239   4                                      }                                                               
+ 240   3                                              
+ 241   3                                      break;  
+ 242   3                              }// end of case 1
+ 243   2      
+ 244   2                      case 2:
+ 245   2                              {
+ 246   3                                      LedDigit2 = LedDigitChar;
+ 247   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 248   3                                      {
+ 249   4                                              LedDigit2BlinkEn = LED_DIGIT_BLINK;
+ 250   4                                      }
+ 251   3                                              
+ 252   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 253   3                                      {
+ 254   4                                              LedDigit2En = LED_DIGIT_ON;
+ 255   4                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 256   4                                      }
+ 257   3                                      
+ 258   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 259   3                                      {
+ 260   4                                              LedDigit2En = LED_DIGIT_OFF;
+ 261   4                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 262   4                                      }                                                               
+ 263   3                                              
+ 264   3                                      break;  
+ 265   3                              }// end of case 2
+ 266   2      
+ 267   2                      case 3:
+ 268   2                              {
+ 269   3                                      LedDigit3 = LedDigitChar;
+ 270   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 271   3                                      {
+ 272   4                                              LedDigit3BlinkEn = LED_DIGIT_BLINK;
+ 273   4                                      }
+ 274   3                                              
+ 275   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 276   3                                      {
+ 277   4                                              LedDigit3En = LED_DIGIT_ON;
+ 278   4                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 279   4                                      }
+ 280   3                                      
+ 281   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 282   3                                      {
+ 283   4                                              LedDigit3En = LED_DIGIT_OFF;
+ 284   4                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 285   4                                      }                                                               
+ 286   3                                              
+ 287   3                                      break;  
+ 288   3                              }// end of case 3
+ 289   2                                                      
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 6   
+
+ 290   2                      case 4:
+ 291   2                              {
+ 292   3                                      LedDigit4 = LedDigitChar;
+ 293   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 294   3                                      {
+ 295   4                                              LedDigit4BlinkEn = LED_DIGIT_BLINK;
+ 296   4                                      }
+ 297   3                                              
+ 298   3                                      if(LedDigitState == LED_DIGIT_ON)
+ 299   3                                      {
+ 300   4                                              LedDigit4En = LED_DIGIT_ON;
+ 301   4                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 302   4                                      }
+ 303   3                                      
+ 304   3                                      if(LedDigitState == LED_DIGIT_OFF)
+ 305   3                                      {
+ 306   4                                              LedDigit4En = LED_DIGIT_OFF;
+ 307   4                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 308   4                                      }                                                               
+ 309   3                                              
+ 310   3                                      break;  
+ 311   3                              }// end of case 4
+ 312   2                              
+ 313   2              }// end of switch(LedDigitNumber)
+ 314   1              
+ 315   1      }//end of LedDigitControl function
+ 316          
+ 317          
+ 318          void Timer5ms_with_ID_timer1(void) interrupt 3
+ 319          {
+ 320   1      
+ 321   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/256;  
+ 322   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%256;
+ 323   1              
+ 324   1      // For test usage, slow the function down 100 times. Each LED digit shows 500ms
+ 325   1      //      test_slow_counter++;
+ 326   1      //      if(test_slow_counter == 10)
+ 327   1      //      {       test_slow_counter = 0;
+ 328   1      // end of code for test usage.
+ 329   1               DigitNumber ++;
+ 330   1      //      }
+ 331   1      
+ 332   1              if (DigitNumber >= 5)
+ 333   1                      DigitNumber = 1;
+ 334   1      
+ 335   1              ind ++;
+ 336   1              
+ 337   1          if(ind == 100)
+ 338   1              {
+ 339   2                      TestLedState = TEST_LED_ON;
+ 340   2              }       
+ 341   1      
+ 342   1              if(ind == 200)
+ 343   1              {
+ 344   2                      TestLedState = TEST_LED_OFF;
+ 345   2                      ind = 0;
+ 346   2              }
+ 347   1      
+ 348   1              /*-------------------------------------------------------------------------------------------------------
+             ------------------------------------------
+ 349   1              Description: Blink LED at a frequency twice per second.
+ 350   1              1. If any of four LED blink property is on, this function gets executed and toggle the state of blinking 
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 7   
+
+             -LED to blink the LED.
+ 351   1              2. If none of LED blink property is on, this function is disabled.
+ 352   1              3. LedBlinkTimer can never reach the value of UNDEFINED_BLINK_TIMER(set to 200 here), otherwise the progr
+             -amme will regard the timer is undefined, i.e. blink function disabled while the blinking is actually running. Therefore 
+             -LED_BLINK_TIME has to be less then UNDEFINED_BLINK_TIMER all the time.
+ 353   1              4. It has to be ensured that all of the digit states being synchronised at the moment any digit changes f
+             -rom not blinking to blinking.
+ 354   1              5. It has to be ensured that all of the blinking digit toggles with same transitions while blinking, i.e.
+             - all ON -> OFF, or all OFF -> ON.
+ 355   1                 It is likely that first digit blink from ON -> 
+ 356   1              ---------------------------------------------------------------------------------------------------------
+             ----------------------------------------*/
+ 357   1      
+ 358   1              if(DigitNumber == 1)
+ 359   1              {       
+ 360   2      
+ 361   2                      if(     ((LastCycleOfLedDigit1BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit1BlinkEn == LED_DIGIT_BLINK    )) 
+             - ||
+ 362   2                              ((LastCycleOfLedDigit2BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit2BlinkEn == LED_DIGIT_BLINK    ))  ||
+ 363   2                              ((LastCycleOfLedDigit3BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit3BlinkEn == LED_DIGIT_BLINK    ))  ||
+ 364   2                              ((LastCycleOfLedDigit4BlinkEn == LED_DIGIT_NOT_BLINK) && (LedDigit4BlinkEn == LED_DIGIT_BLINK    ))  )
+ 365   2                      {
+ 366   3                              if(LedDigit1BlinkEn == LED_DIGIT_BLINK) LedDigit1En = LED_DIGIT_ON;
+ 367   3                              if(LedDigit2BlinkEn == LED_DIGIT_BLINK) LedDigit2En = LED_DIGIT_ON;
+ 368   3                              if(LedDigit3BlinkEn == LED_DIGIT_BLINK) LedDigit3En = LED_DIGIT_ON;
+ 369   3                              if(LedDigit4BlinkEn == LED_DIGIT_BLINK) LedDigit4En = LED_DIGIT_ON;
+ 370   3                      }       
+ 371   2                      
+ 372   2                      if(     ((LastCycleOfLedDigit1BlinkEn == LED_DIGIT_BLINK) && (LedDigit1BlinkEn == LED_DIGIT_NOT_BLINK    )) 
+             - ||
+ 373   2                              ((LastCycleOfLedDigit2BlinkEn == LED_DIGIT_BLINK) && (LedDigit2BlinkEn == LED_DIGIT_NOT_BLINK    ))  ||
+ 374   2                              ((LastCycleOfLedDigit3BlinkEn == LED_DIGIT_BLINK) && (LedDigit3BlinkEn == LED_DIGIT_NOT_BLINK    ))  ||
+ 375   2                              ((LastCycleOfLedDigit4BlinkEn == LED_DIGIT_BLINK) && (LedDigit4BlinkEn == LED_DIGIT_NOT_BLINK    ))  )
+ 376   2                      {
+ 377   3                              if(LedDigit1BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit1En = LED_DIGIT_OFF;
+ 378   3                              if(LedDigit2BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit2En = LED_DIGIT_OFF;
+ 379   3                              if(LedDigit3BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit3En = LED_DIGIT_OFF;
+ 380   3                              if(LedDigit4BlinkEn == LED_DIGIT_NOT_BLINK) LedDigit4En = LED_DIGIT_OFF;                
+ 381   3                      }
+ 382   2                              
+ 383   2                      LastCycleOfLedDigit1BlinkEn = LedDigit1BlinkEn;
+ 384   2                      LastCycleOfLedDigit2BlinkEn = LedDigit2BlinkEn;
+ 385   2                      LastCycleOfLedDigit3BlinkEn = LedDigit3BlinkEn;
+ 386   2                      LastCycleOfLedDigit4BlinkEn = LedDigit4BlinkEn; 
+ 387   2      
+ 388   2                      if( (LedDigit1BlinkEn == LED_DIGIT_BLINK) || (LedDigit2BlinkEn == LED_DIGIT_BLINK) || (LedDigit3BlinkEn 
+             -== LED_DIGIT_BLINK) || (LedDigit4BlinkEn == LED_DIGIT_BLINK) )
+ 389   2                      {
+ 390   3                              if(LedBlinkTimer == UNDEFINED_BLINK_TIMER)
+ 391   3                              {
+ 392   4                                      LedBlinkTimer = 0;
+ 393   4                              }else
+ 394   3                                      {
+ 395   4                                              LedBlinkTimer++;
+ 396   4                                              if(LedBlinkTimer == LED_BLINK_TIME)
+ 397   4                                              {
+ 398   5                                                      if( ((LedDigit1En == LED_DIGIT_ON) && (LedDigit1BlinkEn == LED_DIGIT_BLINK) ) ||
+ 399   5                                                              ((LedDigit2En == LED_DIGIT_ON) && (LedDigit2BlinkEn == LED_DIGIT_BLINK) ) ||
+ 400   5                                                              ((LedDigit3En == LED_DIGIT_ON) && (LedDigit3BlinkEn == LED_DIGIT_BLINK) ) ||
+ 401   5                                                              ((LedDigit4En == LED_DIGIT_ON) && (LedDigit4BlinkEn == LED_DIGIT_BLINK) )  )
+ 402   5                                                      {
+ 403   6                                                              BlinkReferenceLedState = LED_DIGIT_ON;
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 8   
+
+ 404   6                                                      }else
+ 405   5                                                              {
+ 406   6                                                                      BlinkReferenceLedState = LED_DIGIT_OFF;                         
+ 407   6                                                              }
+ 408   5      
+ 409   5                                                      if(LedDigit1BlinkEn == LED_DIGIT_BLINK) 
+ 410   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit1En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit1En = LED_DIGIT_ON;}}
+ 411   5                                                      if(LedDigit2BlinkEn == LED_DIGIT_BLINK) 
+ 412   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit2En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit2En = LED_DIGIT_ON;}}
+ 413   5                                                      if(LedDigit3BlinkEn == LED_DIGIT_BLINK) 
+ 414   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit3En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit3En = LED_DIGIT_ON;}}
+ 415   5                                                      if(LedDigit4BlinkEn == LED_DIGIT_BLINK) 
+ 416   5                                                              {if(BlinkReferenceLedState == LED_DIGIT_ON){LedDigit4En = LED_DIGIT_OFF;}else{ if(BlinkReferenceLed
+             -State == LED_DIGIT_OFF) LedDigit4En = LED_DIGIT_ON;}}
+ 417   5                
+ 418   5                                                      LedBlinkTimer = 0;
+ 419   5                                              }
+ 420   4                                      }// end of if(LedBlinkTimer == UNDEFINED_BLINK_TIMER)
+ 421   3                      }else
+ 422   2                              {
+ 423   3                                      LedBlinkTimer = UNDEFINED_BLINK_TIMER;
+ 424   3                              }//end of if( (LedDigit1En == LED_DIGIT_BLINK) || (LedDigit2En == LED_DIGIT_BLINK) || (LedDigit3En == L
+             -ED_DIGIT_BLINK) || (LedDigit4En == LED_DIGIT_BLINK) )
+ 425   2      
+ 426   2              }// end of if(DigitNumber == 1) 
+ 427   1              
+ 428   1              /*-------------------------------------------------------------------------------------------------------
+             ------------------------------------------
+ 429   1                      Description: Display LED dynamically.
+ 430   1                      The timer interrupt happens every 5ms. And therefore display each LED for 5ms will have the a 20ms loop,
+             - i.e., digit1 for 5ms, and then digit2 for 5ms, and then digit3 for 5ms, and then digit4 for 5ms.  
+ 431   1                      In this time setting, the LEDs are not multiplexing seemed by human eyes.
+ 432   1                      N.B. Display function can never be turned off as there is no other function detecting the transition of 
+             -LED states and call this function. 
+ 433   1                      Once it is disabled by detected the static state of all LED states, it could not change the LED on to LE
+             -D off.
+ 434   1              ---------------------------------------------------------------------------------------------------------
+             ----------------------------------------*/     
+ 435   1      
+ 436   1                      switch(DigitNumber)
+ 437   1                      {
+ 438   2                              case 1 :        LedDigit4Switch = LED_DIGIT_OFF;
+ 439   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit1];
+ 440   2                                                      if(LedDigit1En == LED_DIGIT_ON) {LedDigit1Switch = LED_DIGIT_ON;}
+ 441   2                                                              else{if(LedDigit1En == LED_DIGIT_OFF) LedDigit1Switch = LED_DIGIT_OFF;}
+ 442   2                                                      break;
+ 443   2                                                      
+ 444   2                              case 2 :        LedDigit1Switch = LED_DIGIT_OFF;
+ 445   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit2];
+ 446   2                                                      if(LedDigit2En == LED_DIGIT_ON) {LedDigit2Switch = LED_DIGIT_ON;}
+ 447   2                                                              else{if(LedDigit2En == LED_DIGIT_OFF) LedDigit2Switch = LED_DIGIT_OFF;}
+ 448   2                                                      break;
+ 449   2                                                      
+ 450   2                              case 3 :        LedDigit2Switch = LED_DIGIT_OFF;
+ 451   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit3];
+ 452   2                                                      if(LedDigit3En == LED_DIGIT_ON) {LedDigit3Switch = LED_DIGIT_ON;}
+ 453   2                                                              else{if(LedDigit3En == LED_DIGIT_OFF) LedDigit3Switch = LED_DIGIT_OFF;}
+ 454   2                                                      break;
+ 455   2                                                      
+C51 COMPILER V7.06   DIGIT_LED_DISPLAY                                                     09/18/2014 14:43:43 PAGE 9   
+
+ 456   2                              case 4 :        LedDigit3Switch = LED_DIGIT_OFF;
+ 457   2                                                      LedDigitDisplay = LedDisplayTable [LedDigit4];
+ 458   2                                                      if(LedDigit4En == LED_DIGIT_ON) {LedDigit4Switch = LED_DIGIT_ON;}
+ 459   2                                                              else{if(LedDigit4En == LED_DIGIT_OFF) LedDigit4Switch = LED_DIGIT_OFF;}
+ 460   2                                                      break;
+ 461   2                                              
+ 462   2                      }// end of switch(DigitNumber)
+ 463   1      
+ 464   1      }// end of void Timer5ms_with_ID_timer1(void) interrupt 3
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    863    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     57       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

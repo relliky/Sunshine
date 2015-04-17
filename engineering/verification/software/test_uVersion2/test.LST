@@ -1,0 +1,50 @@
+C51 COMPILER V7.06   TEST                                                                  09/22/2014 14:31:45 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE TEST
+OBJECT MODULE PLACED IN test.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE test.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          /*******************************************************************************
+   2          程序功能：实时采集当前环境温度值，并显示于数码管上。
+   3          *****************************************************************************/
+   4          #include <reg52.h>
+   5          #define uchar unsigned char
+   6          #define uint unsigned int
+   7          
+   8          unsigned int uint_a = 0;
+   9          unsigned char uchar_a = 0;
+  10          
+  11          void main (void){
+  12   1      
+  13   1      int a = 1;
+  14   1      
+  15   1      //while(1){ 
+  16   1      
+  17   1      //a = 2;
+  18   1      
+  19   1      //}
+  20   1      
+  21   1              uint_a  = 542;                                           // 0d542, 0x21E
+  22   1              uint_a  = uint_a/10;                             // 0d54 , 0x36
+  23   1              uchar_a = (unsigned char)(uint_a & 0x00FF);      // 0d54 , 0x36
+  24   1      
+  25   1      
+  26   1      
+  27   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     31    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

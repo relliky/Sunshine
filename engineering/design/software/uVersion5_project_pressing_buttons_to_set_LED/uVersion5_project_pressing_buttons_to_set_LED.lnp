@@ -1,0 +1,5 @@
+"STARTUP.obj",
+"pressing_buttons_to_set_LED.obj" 
+TO "uVersion5_project_pressing_buttons_to_set_LED" 
+RAMSIZE(256) 
+CODE( 0X0000-0X1FFF )

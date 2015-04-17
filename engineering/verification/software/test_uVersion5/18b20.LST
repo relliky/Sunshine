@@ -1,0 +1,194 @@
+C51 COMPILER V9.53.0.0   18B20                                                             09/23/2014 09:21:55 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE 18B20
+OBJECT MODULE PLACED IN 18b20.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE 18b20.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          
+   2          /*******************************************************************************
+   3          程序功能：实时采集当前环境温度值，并显示于数码管上。
+   4          *****************************************************************************/
+   5          #include <reg52.h>
+   6          #define uchar unsigned char
+   7          #define uint unsigned int
+   8          sbit DS=P2^2;           //define interface
+   9          uint temp;             // variable of temperature
+  10          uchar flag1;            // sign of the result positive or negative
+  11          sbit dula=P2^6;
+  12          sbit wela=P2^7;
+  13          unsigned char code table[]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,
+  14                                  0x07,0x7f,0x6f,0x77,0x7c,0x39,0x5e,0x79,0x71};
+  15          unsigned char code table1[]={0xbf,0x86,0xdb,0xcf,0xe6,0xed,0xfd,
+  16                                  0x87,0xff,0xef};
+  17          
+  18          void delay(uint count)      //delay
+  19          {
+  20   1        uint i;
+  21   1        while(count)
+  22   1        {
+  23   2          i=200;
+  24   2          while(i>0)
+  25   2          i--;
+  26   2          count--;
+  27   2        }
+  28   1      }
+  29          void dsreset(void)       //send reset and initialization command
+  30          {
+  31   1        uint i;
+  32   1        DS=0;
+  33   1        i=103;
+  34   1        while(i>0)i--;
+  35   1        DS=1;
+  36   1        i=4;
+  37   1        while(i>0)i--;
+  38   1      }
+  39          
+  40          bit tmpreadbit(void)       //read a bit
+  41          {
+  42   1         uint i;
+  43   1         bit dat;
+  44   1         DS=0;i++;          //i++ for delay
+  45   1         DS=1;i++;i++;
+  46   1         dat=DS;
+  47   1         i=8;while(i>0)i--;
+  48   1         return (dat);
+  49   1      }
+  50          
+  51          uchar tmpread(void)   //read a byte date
+  52          {
+  53   1        uchar i,j,dat;
+  54   1        dat=0;
+  55   1        for(i=1;i<=8;i++)
+C51 COMPILER V9.53.0.0   18B20                                                             09/23/2014 09:21:55 PAGE 2   
+
+  56   1        {
+  57   2          j=tmpreadbit();
+  58   2          dat=(j<<7)|(dat>>1);   //读出的数据最低位在最前面，这样刚好一个字节在DAT里
+  59   2        }
+  60   1        return(dat);
+  61   1      }
+  62          
+  63          void tmpwritebyte(uchar dat)   //write a byte to ds18b20
+  64          {
+  65   1        uint i;
+  66   1        uchar j;
+  67   1        bit testb;
+  68   1        for(j=1;j<=8;j++)
+  69   1        {
+  70   2          testb=dat&0x01;
+  71   2          dat=dat>>1;
+  72   2          if(testb)     //write 1
+  73   2          {
+  74   3            DS=0;
+  75   3            i++;i++;
+  76   3            DS=1;
+  77   3            i=8;while(i>0)i--;
+  78   3          }
+  79   2          else
+  80   2          {
+  81   3            DS=0;       //write 0
+  82   3            i=8;while(i>0)i--;
+  83   3            DS=1;
+  84   3            i++;i++;
+  85   3          }
+  86   2      
+  87   2        }
+  88   1      }
+  89          
+  90          void tmpchange(void)  //DS18B20 begin change
+  91          {
+  92   1        dsreset();
+  93   1        delay(1);
+  94   1        tmpwritebyte(0xcc);  // address all drivers on bus
+  95   1        tmpwritebyte(0x44);  //  initiates a single temperature conversion
+  96   1      }
+  97          
+  98          uint tmp()               //get the temperature
+  99          {
+ 100   1        float tt;
+ 101   1        uchar a,b;
+ 102   1        dsreset();
+ 103   1        delay(1);
+ 104   1        tmpwritebyte(0xcc);
+ 105   1        tmpwritebyte(0xbe);
+ 106   1        a=tmpread();
+ 107   1        b=tmpread();
+ 108   1        temp=b;
+ 109   1        temp<<=8;             //two byte  compose a int variable
+ 110   1        temp=temp|a;
+ 111   1        tt=temp*0.0625;
+ 112   1        temp=tt*10+0.5;
+ 113   1        return temp;
+ 114   1      }
+ 115          
+ 116          void display(uint temp)                 //显示程序
+ 117          {
+C51 COMPILER V9.53.0.0   18B20                                                             09/23/2014 09:21:55 PAGE 3   
+
+ 118   1         uchar A1,A2,A2t,A3;
+ 119   1         A1=temp/100;
+ 120   1         A2t=temp%100;
+ 121   1         A2=A2t/10;
+ 122   1         A3=A2t%10;
+ 123   1         dula=0;
+ 124   1         P0=table[A1];                //显示百位
+ 125   1         dula=1;
+ 126   1         dula=0;
+ 127   1      
+ 128   1         wela=0;
+ 129   1         P0=0x7e;
+ 130   1         wela=1;
+ 131   1         wela=0;
+ 132   1         delay(1);
+ 133   1      
+ 134   1         dula=0;
+ 135   1         P0=table1[A2];               //显示十位
+ 136   1         dula=1;
+ 137   1         dula=0;
+ 138   1      
+ 139   1         wela=0;
+ 140   1         P0=0x7d;
+ 141   1         wela=1;
+ 142   1         wela=0;
+ 143   1         delay(1);
+ 144   1      
+ 145   1         P0=table[A3];                //显示个位
+ 146   1         dula=1;
+ 147   1         dula=0;
+ 148   1      
+ 149   1         P0=0x7b;
+ 150   1         wela=1;
+ 151   1         wela=0;
+ 152   1         delay(1);
+ 153   1      }
+ 154          
+ 155          
+ 156          void main()
+ 157          {
+ 158   1       uchar a;
+ 159   1        do
+ 160   1        {
+ 161   2          tmpchange();
+ 162   2              for(a=10;a>0;a--)
+ 163   2              {   
+ 164   3                      display(tmp());
+ 165   3              }
+ 166   2        } while(1);
+ 167   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    453    ----
+   CONSTANT SIZE    =     26    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3       6
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       2
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,718 @@
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE PRESSING_BUTTONS_TO_SET_LED
+OBJECT MODULE PLACED IN pressing_buttons_to_set_LED.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE pressing_buttons_to_set_LED.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          
+   4          // Timer interrupt parameters
+   5          #define INTERRUPT_ON                                            1
+   6          #define INTERRUPT_OFF                                           0 
+   7          #define TMOD_TIMER0_16BIT_TIMER1_16BIT                  0x11  
+   8          // CYCLE_FOR_TIMER1_UNDER_11_0952MHZ (5ms)= (5000us)/(1/11.0592 us/clock)/12 clock/machine_cycle = 5000*11
+             -.0592/12=4608   
+   9          #define CYCLE_FOR_TIMER1_UNDER_11_0952MHZ       4608  
+  10          
+  11          // Test LED cathode state value. ON has to be 0. OFF has to be 1
+  12          #define TEST_LED_ON        0
+  13          #define TEST_LED_OFF   1
+  14          
+  15          // 7-segment LED cathode inverted value, ON has to be 1, OFF has to be 0.
+  16          #define LED_DIGIT_OFF           0
+  17          #define LED_DIGIT_ON            1
+  18          #define LED_DIGIT_BLINK         0x2
+  19          #define LED_DIGIT_NOT_BLINK 0x3
+  20          #define NOTHING                         8
+  21          
+  22          // Buttons debouncing parameters
+  23          #define DEBOUNCED_TIME 10
+  24          #define UNDEFINED_DEBOUNCE_TIME 99
+  25          // The button debounce time is 10ms, timer1 interrupt happened every 5ms, and therefore BUTTON_DEBOUNCE_TI
+             -ME_FOR_TIMER1 is 2 here. 
+  26          #define BUTTON_DEBOUNCE_TIME_FOR_TIMER1 2 
+  27          #define RELEASED           1
+  28          #define PRESSED            0
+  29          
+  30          // LED display table macros
+  31          #define DIGIT_H        16
+  32          #define DIGIT_C        0xC
+  33          #define DIGIT_DEGREE   17
+  34          #define DECIMAL_NUMBER 18
+  35          // LED blinks twice per 1s, which means LED needs to be enable and disable every 500ms, and the time betwe
+             -en enable and disable is 250ms, which is 50 times of 5ms timer interrupt
+  36          #define LED_BLINK_TIME 50
+  37          #define UNDEFINED_BLINK_TIMER 200
+  38          
+  39          //
+  40          #define USER_INPUT_STATE_NORMAL_DISPLAY         1
+  41          #define USER_INPUT_STATE_SET_TIME                       2
+  42          #define USER_INPUT_STATE_SET_TEMPERATURE        3
+  43          #define USER_INPUT_STATE_IDLE                           4
+  44          
+  45          #define RADIATOR_MAX_HOURS 12
+  46          
+  47          // Macros for general usage.
+  48          #define YES 1
+  49          #define NO  0
+  50          
+  51          sbit LedDigit1Switch = P1^0;
+  52          sbit LedDigit2Switch = P1^1;
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 2   
+
+  53          sbit LedDigit3Switch = P1^2;
+  54          sbit LedDigit4Switch = P1^3;
+  55          sbit ButtonMinus         = P1^4;
+  56          sbit ButtonPlus          = P1^5;
+  57          sbit ButtonSelect        = P1^6;
+  58          sbit ButtonAlt           = P1^7;
+  59          sfr  LedDigitDisplay = 0xA0; //Port2 declaration
+  60          sbit TestLedState        = P3^7;
+  61          
+  62          unsigned char LedDigit1            = 8;
+  63          unsigned char LedDigit2            = 8;
+  64          unsigned char LedDigit3            = 8;
+  65          unsigned char LedDigit4            = 8;
+  66          unsigned char LedDigit1En          = LED_DIGIT_OFF;
+  67          unsigned char LedDigit2En          = LED_DIGIT_OFF;
+  68          unsigned char LedDigit3En          = LED_DIGIT_OFF;
+  69          unsigned char LedDigit4En          = LED_DIGIT_OFF;
+  70          unsigned char DigitNumber          = 1;
+  71          unsigned char LedBlinkTimer    = UNDEFINED_BLINK_TIMER;
+  72          unsigned char LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+  73          unsigned char LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+  74          unsigned char LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+  75          unsigned char LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+  76          
+  77          
+  78          unsigned char ButtonMinusState                  = RELEASED;
+  79          unsigned char ButtonPlusState                   = RELEASED;
+  80          unsigned char ButtonSelectState                 = RELEASED;
+  81          unsigned char ButtonAltState                    = RELEASED;
+  82          unsigned char ButtonPlusDebounced               = NO;
+  83          unsigned char ButtonMinusDebounced      = NO;
+  84          unsigned char ButtonSelectDebounced     = NO;
+  85          unsigned char ButtonAltDebounced                = NO;
+  86          unsigned int  ButtonPlusDebounceTime    = UNDEFINED_DEBOUNCE_TIME;
+  87          unsigned int  ButtonMinusDebounceTime   = UNDEFINED_DEBOUNCE_TIME;
+  88          unsigned int  ButtonSelectDebounceTime  = UNDEFINED_DEBOUNCE_TIME;
+  89          unsigned int  ButtonAltDebounceTime     = UNDEFINED_DEBOUNCE_TIME;
+  90          
+  91          // Table of inverted anode values of 7-segment LED to display 0-F,h,o(degree),"0." "1." "2." "3." "4." "5.
+             -" "6." "7." "8." "9."  
+  92          const unsigned char LedDisplayTable[]={~0x3f,~0x06,~0x5b,~0x4f,~0x66,~0x6d,~0x7d,               
+  93                                                                  ~0x07,~0x7f,~0x6f,~0x77,~0x7c,~0x39,~0x5e,~0x79,~0x71,
+  94                                                                  ~0x74,~0x63,
+  95                                                                  ~(0x3f+0x80),~(0x06+0x80),~(0x5b+0x80),~(0x4f+0x80),
+  96                                                                  ~(0x66+0x80),~(0x6d+0x80),~(0x7d+0x80),~(0x07+0x80),
+  97                                                                  ~(0x7f+0x80),~(0x6f+0x80)};
+  98          
+  99          unsigned char RadiatorOnTime = 0;
+ 100          unsigned char TimerTenthsDigit = 0;
+ 101          unsigned char TimerUnitsDigit = 0;
+ 102          unsigned char TimerTensDigit = 0;
+ 103          
+ 104          unsigned char UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 105          
+ 106          void LedDigitControl(unsigned char LedDigitNumber, unsigned char LedDigitState, unsigned char LedDigitChar
+             -);
+ 107          
+ 108          /******************************************************************/
+ 109          /*                   main                                       */
+ 110          /******************************************************************/
+ 111          int main()
+ 112          {
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 3   
+
+ 113   1      
+ 114   1       
+ 115   1          LedDigit1En = LED_DIGIT_OFF;
+ 116   1          LedDigit2En = LED_DIGIT_OFF;
+ 117   1          LedDigit3En = LED_DIGIT_OFF;
+ 118   1          LedDigit4En = LED_DIGIT_OFF;
+ 119   1              LedDigit1Switch = LED_DIGIT_OFF;
+ 120   1              LedDigit2Switch = LED_DIGIT_OFF;
+ 121   1              LedDigit3Switch = LED_DIGIT_OFF;
+ 122   1              LedDigit4Switch = LED_DIGIT_OFF;
+ 123   1      
+ 124   1              
+ 125   1              // Timers interrupt initialisations 
+ 126   1              EA   = INTERRUPT_ON;
+ 127   1              TMOD = TMOD_TIMER0_16BIT_TIMER1_16BIT;
+ 128   1      
+ 129   1          ET1  = INTERRUPT_ON;
+ 130   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 131   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 132   1              TR1  = INTERRUPT_ON;
+ 133   1              
+ 134   1              
+ 135   1              
+ 136   1              
+ 137   1              
+ 138   1       while(1)
+ 139   1       {
+ 140   2       
+ 141   2              TimerTensDigit  = RadiatorOnTime%100/10;
+ 142   2              TimerUnitsDigit = RadiatorOnTime%10;
+ 143   2          TimerTenthsDigit = 5;
+ 144   2       
+ 145   2       
+ 146   2      /*     LedDigit1En = LED_DIGIT_ON;
+ 147   2              LedDigit1 = TimerTensDigit;
+ 148   2          LedDigit2En = LED_DIGIT_ON;
+ 149   2              LedDigit2 = TimerUnitsDigit;
+ 150   2          LedDigit3En = LED_DIGIT_ON;
+ 151   2              LedDigit3 = TimerTenthsDigit;
+ 152   2       
+ 153   2          LedDigit4En = LED_DIGIT_ON;
+ 154   2              LedDigit4 = DIGIT_H;
+ 155   2              
+ 156   2       */
+ 157   2      
+ 158   2      /*       
+ 159   2              Description: Setting the user input state machine. 
+ 160   2              1. The product will interface with users in four modes: normal display mode, setting time mode, setting t
+             -emperature mode, idle mode.
+ 161   2      
+ 162   2              2. Normal display mode
+ 163   2                      i)   When the product is powered on, the default mode is the normal display mode.
+ 164   2                      ii)  It displays the time set and the temperature set
+ 165   2                      iii) It displays the time set for 5s and then switches to display the temperature set for another 5s and
+             - then back to display the time set.
+ 166   2                      iv)  when no any button is pressed for 20s, the user input state switches to the idle mode.
+ 167   2      
+ 168   2              3. Setting time mode
+ 169   2                      i)   The time digits, i.e. first, second and third digits, are blinking at the frequency twice every 1s.
+ 170   2                      ii)  The four digits are "xx.xh", where x is a number, "h" is just a letter standing for hours.
+ 171   2                      iii) The first digit can be set to "0", and "1" only.
+ 172   2                      iv)  The second digit can be set to "0." "1." "2." "3." "4." "5." "6." "7." "8." "9." only.
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 4   
+
+ 173   2                      v)   The third digit can be set to "0" and "5" only
+ 174   2                      vi)  The forth digit can be set to letter "h" only
+ 175   2                      vii) The time can be set from "0.0h" to "12.0h" with each step 0.5h by pressing plus button and minus bu
+             -tton. For example "0.0h" ->(press plus button) "0.5h" -> (press plus button) "1.0h", or "12.0h" ->(press plus button) "1
+             -2.0h"
+ 176   2                      viii)When the system is reset, the time is set to the default value, 0.0h.
+ 177   2                      ix)  The user input state switches to the normal display mode 20s after none of four buttons has been pr
+             -essed.
+ 178   2                      
+ 179   2              4. Setting temperature mode
+ 180   2                      i)   The temperature digits, i.e. first and second digits, are blinking at the frequency twice every 1s.
+ 181   2                      ii)  The four digits are "xx.Co", where x is a number, "Co" is just a letter and a symbol standing for d
+             -egree Celsius.
+ 182   2                      iii) The first digit can be set to "2", "3", "4" only.
+ 183   2                      iv)  The second digit can be set to "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" only
+ 184   2                      v)   The third digit can be set to letter "C" only
+ 185   2                      vi)  The forth digit can be set to symbol degree "o" only
+ 186   2                      vii) The temperature can be set to from 20Co to 40Co with each step 1Co by pressing plus button and minu
+             -s button. For example "20Co" ->(press plus button) "21Co" -> (press plus button) "22Co", or "40Co" ->(press plus button)
+             - "40Co"
+ 187   2                      viii)When the system is reset, the temperature is set to the default value, 20Co.
+ 188   2                      ix)  The user input state switches to the normal display mode 20s after none of four buttons has been pr
+             -essed.
+ 189   2                      
+ 190   2              5. Idle mode
+ 191   2                      i)   The microcontroller is still running in the normal-on mode, but the LED screen is off.
+ 192   2                      ii)  Any key pressed will put the user input state to the normal display mode.
+ 193   2                      iii) When the system is in the sleep mode, the user input state has to be in the idle mode.
+ 194   2              
+ 195   2       */
+ 196   2              switch(UserInputState)
+ 197   2              {
+ 198   3                      case USER_INPUT_STATE_NORMAL_DISPLAY:
+ 199   3                      {
+ 200   4                      // For test propose
+ 201   4                              LedDigitControl(1, LED_DIGIT_BLINK, 1                   );
+ 202   4                              LedDigitControl(2, LED_DIGIT_OFF  , NOTHING     );
+ 203   4                              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING     );
+ 204   4                              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING     );
+ 205   4                      // End of test propose code                                     
+ 206   4              
+ 207   4      
+ 208   4                              if(ButtonSelectState == PRESSED) 
+ 209   4                              {
+ 210   5                                      UserInputState = USER_INPUT_STATE_SET_TIME;
+ 211   5                                      ButtonSelectState = RELEASED;   
+ 212   5                              }
+ 213   4                              break;                  
+ 214   4                      }// end of case USER_INPUT_STATE_NORMAL_DISPLAY
+ 215   3                      
+ 216   3                      case USER_INPUT_STATE_SET_TIME:
+ 217   3                      {
+ 218   4                      // For test propose
+ 219   4                              LedDigitControl(2, LED_DIGIT_BLINK, 1                   );
+ 220   4                              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING     );
+ 221   4                              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING     );
+ 222   4                              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING     );
+ 223   4                      // End of test propose code                                     
+ 224   4                      
+ 225   4                              if(ButtonSelectState == PRESSED)
+ 226   4                              {
+ 227   5                                      UserInputState = USER_INPUT_STATE_SET_TEMPERATURE;
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 5   
+
+ 228   5                                      ButtonSelectState = RELEASED;
+ 229   5                              }       
+ 230   4                              break;
+ 231   4                      }// end of case USER_INPUT_STATE_SET_TIME
+ 232   3      
+ 233   3                      case USER_INPUT_STATE_SET_TEMPERATURE:
+ 234   3                      {
+ 235   4                      // For test propose
+ 236   4                              LedDigitControl(3, LED_DIGIT_BLINK, 1                   );
+ 237   4                              LedDigitControl(2, LED_DIGIT_OFF  , NOTHING     );
+ 238   4                              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING     );
+ 239   4                              LedDigitControl(4, LED_DIGIT_OFF  , NOTHING     );
+ 240   4                      // End of test propose code                                     
+ 241   4                      
+ 242   4                              if(ButtonSelectState == PRESSED)
+ 243   4                              {
+ 244   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 245   5                                      ButtonSelectState = RELEASED;
+ 246   5                              }
+ 247   4                              break;
+ 248   4                      }// end of case USER_INPUT_STATE_SET_TEMPERATURE
+ 249   3      
+ 250   3                      case USER_INPUT_STATE_IDLE:
+ 251   3                      {
+ 252   4                      // For test propose
+ 253   4                              LedDigitControl(4, LED_DIGIT_BLINK, 1                   );
+ 254   4                              LedDigitControl(2, LED_DIGIT_OFF  , NOTHING     );
+ 255   4                              LedDigitControl(3, LED_DIGIT_OFF  , NOTHING     );
+ 256   4                              LedDigitControl(1, LED_DIGIT_OFF  , NOTHING     );
+ 257   4                      // End of test propose code                                     
+ 258   4                      
+ 259   4                              if(ButtonSelectState == PRESSED)
+ 260   4                              {
+ 261   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 262   5                                      ButtonSelectState = RELEASED;
+ 263   5                              }                               
+ 264   4                              if(ButtonPlusState == PRESSED)
+ 265   4                              {
+ 266   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 267   5                                      ButtonPlusState = RELEASED;
+ 268   5                              }
+ 269   4                              if(ButtonMinusState == PRESSED)
+ 270   4                              {
+ 271   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 272   5                                      ButtonMinusState = RELEASED;
+ 273   5                              }
+ 274   4                              if(ButtonAltState == PRESSED)
+ 275   4                              {
+ 276   5                                      UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 277   5                                      ButtonAltState = RELEASED;
+ 278   5                              }
+ 279   4                              break;
+ 280   4                      }// end of case USER_INPUT_STATE_IDLE                   
+ 281   3      
+ 282   3                      default:
+ 283   3                      {
+ 284   4                      
+ 285   4                              UserInputState = USER_INPUT_STATE_NORMAL_DISPLAY;
+ 286   4                              break;
+ 287   4                      }
+ 288   3                      
+ 289   3              }// end of switch(UserInputState)
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 6   
+
+ 290   2      
+ 291   2      /* 
+ 292   2              LedDigitControl(1, LED_DIGIT_BLINK, 3                   );
+ 293   2              LedDigitControl(2, LED_DIGIT_BLINK, 6                   );
+ 294   2              LedDigitControl(3, LED_DIGIT_ON   , DIGIT_C             );
+ 295   2              LedDigitControl(4, LED_DIGIT_ON   , DIGIT_DEGREE);
+ 296   2              
+ 297   2       */
+ 298   2       }// end of while(1) loop
+ 299   1       
+ 300   1      
+ 301   1       return(0);
+ 302   1      }
+ 303          
+ 304          
+ 305          /*
+ 306                  Description: Changing a state of a LED digit
+ 307                  Input:           unsigned char LedDigitNumber , i.e. which LED digit is controlled by this function. It can only 
+             -be 1,2,3,4.
+ 308                               unsigned char LedDigitChar   , i.e. what character is sent to this digit. It can only be 0 t
+             -o 27. (0-F,DIGIT_H,DIGIT_DEGREE,DECIMAL_NUMBER+(0-9))
+ 309                                           unsigned char LedDigitState  , i.e. what state is for this LED digit: ON/OFF/BLINK. It can only be LE
+             -D_DIGIT_BLINK, LED_DIGIT_ON, LED_DIGIT_OFF.
+ 310          */
+ 311          void LedDigitControl(unsigned char LedDigitNumber, unsigned char LedDigitState, unsigned char LedDigitChar
+             -)
+ 312          {
+ 313   1              switch(LedDigitNumber)
+ 314   1              {
+ 315   2                      case 1:
+ 316   2                              {
+ 317   3                                      LedDigit1 = LedDigitChar;
+ 318   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 319   3                                      {
+ 320   4                                              LedDigit1BlinkEn = LED_DIGIT_BLINK;
+ 321   4                                      }else
+ 322   3                                              {
+ 323   4                                                      if(LedDigitState == LED_DIGIT_ON)
+ 324   4                                                      {
+ 325   5                                                              LedDigit1En = LED_DIGIT_ON;
+ 326   5                                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 327   5                                                      }else
+ 328   4                                                              {
+ 329   5                                                                      if(LedDigitState == LED_DIGIT_OFF)
+ 330   5                                                                      {
+ 331   6                                                                              LedDigit1En = LED_DIGIT_OFF;
+ 332   6                                                                              LedDigit1BlinkEn = LED_DIGIT_NOT_BLINK;
+ 333   6                                                                      }                                                               
+ 334   5                                                              }
+ 335   4                                              }
+ 336   3                                      break;  
+ 337   3                              }// end of case 1
+ 338   2              
+ 339   2                      case 2:
+ 340   2                              {
+ 341   3                                      LedDigit2 = LedDigitChar;
+ 342   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 343   3                                      {
+ 344   4                                              LedDigit2BlinkEn = LED_DIGIT_BLINK;
+ 345   4                                      }else
+ 346   3                                              {
+ 347   4                                                      if(LedDigitState == LED_DIGIT_ON)
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 7   
+
+ 348   4                                                      {
+ 349   5                                                              LedDigit2En = LED_DIGIT_ON;
+ 350   5                                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 351   5                                                      }else
+ 352   4                                                              {
+ 353   5                                                                      if(LedDigitState == LED_DIGIT_OFF)
+ 354   5                                                                      {
+ 355   6                                                                              LedDigit2En = LED_DIGIT_OFF;
+ 356   6                                                                              LedDigit2BlinkEn = LED_DIGIT_NOT_BLINK;
+ 357   6                                                                      }                                                               
+ 358   5                                                              }
+ 359   4                                              }
+ 360   3                                      break;  
+ 361   3                              }// end of case 2
+ 362   2              
+ 363   2                      case 3:
+ 364   2                              {
+ 365   3                                      LedDigit3 = LedDigitChar;
+ 366   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 367   3                                      {
+ 368   4                                              LedDigit3BlinkEn = LED_DIGIT_BLINK;
+ 369   4                                      }else
+ 370   3                                              {
+ 371   4                                                      if(LedDigitState == LED_DIGIT_ON)
+ 372   4                                                      {
+ 373   5                                                              LedDigit3En = LED_DIGIT_ON;
+ 374   5                                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 375   5                                                      }else
+ 376   4                                                              {
+ 377   5                                                                      if(LedDigitState == LED_DIGIT_OFF)
+ 378   5                                                                      {
+ 379   6                                                                              LedDigit3En = LED_DIGIT_OFF;
+ 380   6                                                                              LedDigit3BlinkEn = LED_DIGIT_NOT_BLINK;
+ 381   6                                                                      }                                                               
+ 382   5                                                              }
+ 383   4                                              }
+ 384   3                                      break;  
+ 385   3                              }// end of case 3
+ 386   2              
+ 387   2                      case 4:
+ 388   2                              {
+ 389   3                                      LedDigit4 = LedDigitChar;
+ 390   3                                      if (LedDigitState == LED_DIGIT_BLINK)
+ 391   3                                      {
+ 392   4                                              LedDigit4BlinkEn = LED_DIGIT_BLINK;
+ 393   4                                      }else
+ 394   3                                              {
+ 395   4                                                      if(LedDigitState == LED_DIGIT_ON)
+ 396   4                                                      {
+ 397   5                                                              LedDigit4En = LED_DIGIT_ON;
+ 398   5                                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 399   5                                                      }else
+ 400   4                                                              {
+ 401   5                                                                      if(LedDigitState == LED_DIGIT_OFF)
+ 402   5                                                                      {
+ 403   6                                                                              LedDigit4En = LED_DIGIT_OFF;
+ 404   6                                                                              LedDigit4BlinkEn = LED_DIGIT_NOT_BLINK;
+ 405   6                                                                      }                                                               
+ 406   5                                                              }
+ 407   4                                              }
+ 408   3                                      break;  
+ 409   3                              }// end of case 4
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 8   
+
+ 410   2      
+ 411   2              }// end of switch(LedDigitNumber)
+ 412   1              
+ 413   1      }//end of LedDigitControl function
+ 414          
+ 415          void Timer5ms_with_ID_timer1() interrupt 3
+ 416          {
+ 417   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 418   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theoret
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 419   1          TestLedState = TEST_LED_ON;
+ 420   1      
+ 421   1              TH1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)/0xFF;  
+ 422   1              TL1  = (0xFFFF - CYCLE_FOR_TIMER1_UNDER_11_0952MHZ)%0xFF;
+ 423   1      
+ 424   1      /* -------------------------------------------------------------------------------------------------------
+             --------------------------------------
+ 425   1        Description: Debouncing Plus button, Minus button, Select button, Alternative button.
+ 426   1        1. When any button is pressed, programme is going to confirm that it is pressed and 
+ 427   1        it is not a noise as the button is being held for more than 10ms. 
+ 428   1        2. The programme will immediately resonse  the button is pressed if it is not noise 
+ 429   1        and it will not recognise any continuous pressing, which means the count of pressing 
+ 430   1        this button will not increase until it is released and pressed again.
+ 431   1        3. Pressing multiple buttons in the same time will not interference each other as they were denounced in
+             -dividually.
+ 432   1        and the result of pressing multiple buttons is predictable as the order of each button is pressed.
+ 433   1        --------------------------------------------------------------------------------------------------------
+             -------------------------------------*/
+ 434   1        if(ButtonPlus == PRESSED)  
+ 435   1        {
+ 436   2              if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects but
+             -ton is pressed. ButtonPlusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 437   2              {       
+ 438   3                      ButtonPlusDebounceTime = 0;
+ 439   3              }else
+ 440   2                      {       
+ 441   3                              if(ButtonPlusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 442   3                              {
+ 443   4                                      ButtonPlusDebounceTime++;
+ 444   4                                      ButtonPlusDebounced = NO;
+ 445   4                              }               
+ 446   3                              if(ButtonPlusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 447   3                              {
+ 448   4                                      if(ButtonPlusDebounced == NO)
+ 449   4                                      {
+ 450   5                                              ButtonPlusState = PRESSED;
+ 451   5                                      }
+ 452   4                                      ButtonPlusDebounced = YES;
+ 453   4                              }
+ 454   3                      }// end of if(ButtonPlusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 455   2        }else
+ 456   1                      {
+ 457   2                              if(ButtonPlusDebounced == YES)
+ 458   2                              {
+ 459   3                                      ButtonPlusDebounced = NO;
+ 460   3                                      ButtonPlusDebounceTime = UNDEFINED_DEBOUNCE_TIME;       
+ 461   3                              }               
+ 462   2                      }// end of if(ButtonPlus == PRESSED) else
+ 463   1        
+ 464   1        if(ButtonMinus == PRESSED)  
+ 465   1        {
+ 466   2              if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects bu
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 9   
+
+             -tton is pressed. ButtonMinusDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 467   2              {       
+ 468   3                      ButtonMinusDebounceTime = 0;
+ 469   3              }else
+ 470   2                      {       
+ 471   3                              if(ButtonMinusDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 472   3                              {
+ 473   4                                      ButtonMinusDebounceTime++;
+ 474   4                                      ButtonMinusDebounced = NO;
+ 475   4                              }               
+ 476   3                              if(ButtonMinusDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 477   3                              {
+ 478   4                                      if(ButtonMinusDebounced == NO)
+ 479   4                                      {
+ 480   5                                              ButtonMinusState = PRESSED;
+ 481   5                                      }
+ 482   4                                      ButtonMinusDebounced = YES;
+ 483   4                              }
+ 484   3                      }// end of if(ButtonMinusDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 485   2        }else
+ 486   1                      {
+ 487   2                              if(ButtonMinusDebounced == YES)
+ 488   2                              {
+ 489   3                                      ButtonMinusDebounced = NO;
+ 490   3                                      ButtonMinusDebounceTime = UNDEFINED_DEBOUNCE_TIME;      
+ 491   3                              }               
+ 492   2                      }// end of if(ButtonMinus == PRESSED) else
+ 493   1        
+ 494   1        if(ButtonSelect == PRESSED)  
+ 495   1        {
+ 496   2              if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects b
+             -utton is pressed. ButtonSelectDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 497   2              {       
+ 498   3                      ButtonSelectDebounceTime = 0;
+ 499   3              }else
+ 500   2                      {       
+ 501   3                              if(ButtonSelectDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 502   3                              {
+ 503   4                                      ButtonSelectDebounceTime++;
+ 504   4                                      ButtonSelectDebounced = NO;
+ 505   4                              }               
+ 506   3                              if(ButtonSelectDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 507   3                              {
+ 508   4                                      if(ButtonSelectDebounced == NO)
+ 509   4                                      {
+ 510   5                                              ButtonSelectState = PRESSED;
+ 511   5                                      }
+ 512   4                                      ButtonSelectDebounced = YES;
+ 513   4                              }
+ 514   3                      }// end of if(ButtonSelectDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 515   2        }else
+ 516   1                      {
+ 517   2                              if(ButtonSelectDebounced == YES)
+ 518   2                              {
+ 519   3                                      ButtonSelectDebounced = NO;
+ 520   3                                      ButtonSelectDebounceTime = UNDEFINED_DEBOUNCE_TIME;     
+ 521   3                              }               
+ 522   2                      }// end of if(ButtonSelect == PRESSED) else
+ 523   1        
+ 524   1        if(ButtonAlt == PRESSED)  
+ 525   1        {
+ 526   2              if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) // This is the first time the interrupt detects butt
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 10  
+
+             -on is pressed. ButtonAltDebounceTime has to make sure not reach UNDEFINED_DEBOUNCE_TIME!!
+ 527   2              {       
+ 528   3                      ButtonAltDebounceTime = 0;
+ 529   3              }else
+ 530   2                      {       
+ 531   3                              if(ButtonAltDebounceTime < BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 532   3                              {
+ 533   4                                      ButtonAltDebounceTime++;
+ 534   4                                      ButtonAltDebounced = NO;
+ 535   4                              }               
+ 536   3                              if(ButtonAltDebounceTime == BUTTON_DEBOUNCE_TIME_FOR_TIMER1)
+ 537   3                              {
+ 538   4                                      if(ButtonAltDebounced == NO)
+ 539   4                                      {
+ 540   5                                              ButtonAltState = PRESSED;
+ 541   5                                      }
+ 542   4                                      ButtonAltDebounced = YES;
+ 543   4                              }
+ 544   3                      }// end of if(ButtonAltDebounceTime == UNDEFINED_DEBOUNCE_TIME) else
+ 545   2        }else
+ 546   1                      {
+ 547   2                              if(ButtonAltDebounced == YES)
+ 548   2                              {
+ 549   3                                      ButtonAltDebounced = NO;
+ 550   3                                      ButtonAltDebounceTime = UNDEFINED_DEBOUNCE_TIME;        
+ 551   3                              }               
+ 552   2                      }// end of if(ButtonAlt == PRESSED) else
+ 553   1        
+ 554   1       
+ 555   1              /*
+ 556   1                      Description: Blink LEDs twice per second.
+ 557   1                      If any of four LED blink property is on, this function gets executed and toggle the state of blinking LE
+             -D to blink the LED.
+ 558   1                      If none of LED blink property is on, this function is disabled.
+ 559   1              */
+ 560   1              if( (LedDigit1BlinkEn == LED_DIGIT_BLINK) || (LedDigit2BlinkEn == LED_DIGIT_BLINK) || (LedDigit3BlinkEn 
+             -== LED_DIGIT_BLINK) || (LedDigit4BlinkEn == LED_DIGIT_BLINK) )
+ 561   1              {
+ 562   2                      if(LedBlinkTimer == UNDEFINED_BLINK_TIMER)
+ 563   2                      {
+ 564   3                              LedBlinkTimer = 0;
+ 565   3                      }else
+ 566   2                              {
+ 567   3                                      LedBlinkTimer++;
+ 568   3                                      if(LedBlinkTimer == LED_BLINK_TIME)
+ 569   3                                      {
+ 570   4                                              if(LedDigit1BlinkEn == LED_DIGIT_BLINK) 
+ 571   4                                                      if(LedDigit1En == LED_DIGIT_ON){LedDigit1En = LED_DIGIT_OFF;}else{LedDigit1En = LED_DIGIT_ON;}
+ 572   4                                              if(LedDigit2BlinkEn == LED_DIGIT_BLINK) 
+ 573   4                                                      if(LedDigit2En == LED_DIGIT_ON){LedDigit2En = LED_DIGIT_OFF;}else{LedDigit2En = LED_DIGIT_ON;}
+ 574   4                                              if(LedDigit3BlinkEn == LED_DIGIT_BLINK) 
+ 575   4                                                      if(LedDigit3En == LED_DIGIT_ON){LedDigit3En = LED_DIGIT_OFF;}else{LedDigit3En = LED_DIGIT_ON;}
+ 576   4                                              if(LedDigit4BlinkEn == LED_DIGIT_BLINK) 
+ 577   4                                                      if(LedDigit4En == LED_DIGIT_ON){LedDigit4En = LED_DIGIT_OFF;}else{LedDigit4En = LED_DIGIT_ON;}
+ 578   4      
+ 579   4                                              LedBlinkTimer = 0;
+ 580   4                                      }
+ 581   3                              }
+ 582   2              }else
+ 583   1                      {
+ 584   2                              LedBlinkTimer = UNDEFINED_BLINK_TIMER;
+ 585   2                      }//end of if( (LedDigit1En == LED_DIGIT_BLINK) || (LedDigit2En == LED_DIGIT_BLINK) || (LedDigit3En == LE
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 11  
+
+             -D_DIGIT_BLINK) || (LedDigit4En == LED_DIGIT_BLINK) )
+ 586   1      
+ 587   1              /*
+ 588   1                      Description: Display LED dynamically.
+ 589   1                      The timer interrupt happens every 5ms. And therefore display each LED for 5ms will have the a 20ms loop,
+             - i.e., digit1 for 5ms, and then digit2 for 5ms, and then digit3 for 5ms, and then digit4 for 5ms.  
+ 590   1                      In this time setting, the LEDs are not multiplexing seemed by human eyes.
+ 591   1              */      
+ 592   1              if( !((LedDigit1En == LED_DIGIT_OFF) && (LedDigit2En == LED_DIGIT_OFF) && (LedDigit3En == LED_DIGIT_OFF) 
+             -&& (LedDigit4En == LED_DIGIT_OFF)) )
+ 593   1              {
+ 594   2                      DigitNumber ++;
+ 595   2                      if (DigitNumber >= 5)
+ 596   2                              DigitNumber = 1;
+ 597   2                              
+ 598   2                      switch(DigitNumber)
+ 599   2                      {
+ 600   3                              case 1 :        LedDigitDisplay = LedDisplayTable [LedDigit1];
+ 601   3                                                      LedDigit4Switch = LED_DIGIT_OFF;
+ 602   3                                                      if(LedDigit1En == LED_DIGIT_ON) 
+ 603   3                                                              {LedDigit1Switch = LED_DIGIT_ON;}
+ 604   3                                                              else{LedDigit1Switch = LED_DIGIT_OFF;}
+ 605   3                                                      break;
+ 606   3                                                      
+ 607   3                              case 2 :        LedDigitDisplay = LedDisplayTable [LedDigit2];
+ 608   3                                                      LedDigit1Switch = LED_DIGIT_OFF;
+ 609   3                                                      if(LedDigit2En == LED_DIGIT_ON) 
+ 610   3                                                              {LedDigit2Switch = LED_DIGIT_ON;}
+ 611   3                                                              else{LedDigit2Switch = LED_DIGIT_OFF;}
+ 612   3                                                      break;
+ 613   3      
+ 614   3                              case 3 :        LedDigitDisplay = LedDisplayTable [LedDigit3];
+ 615   3                                                      LedDigit2Switch = LED_DIGIT_OFF;
+ 616   3                                                      if(LedDigit3En == LED_DIGIT_ON) 
+ 617   3                                                              {LedDigit3Switch = LED_DIGIT_ON;}
+ 618   3                                                              else{LedDigit3Switch = LED_DIGIT_OFF;}
+ 619   3                                                      break;
+ 620   3      
+ 621   3                              case 4 :        LedDigitDisplay = LedDisplayTable [LedDigit4];
+ 622   3                                                      LedDigit3Switch = LED_DIGIT_OFF;
+ 623   3                                                      if(LedDigit4En == LED_DIGIT_ON) 
+ 624   3                                                              {LedDigit4Switch = LED_DIGIT_ON;}
+ 625   3                                                              else{LedDigit4Switch = LED_DIGIT_OFF;}
+ 626   3                                                      break;                                          
+ 627   3                                              
+ 628   3                      }// end of switch(DigitNumber)
+ 629   2      
+ 630   2      
+ 631   2              }// end of if( (LedDigit1 == DIGIT_LED_OFF) && (LedDigit2 == DIGIT_LED_OFF) && (LedDigit3 == DIGIT_LED_OF
+             -F) && (LedDigit4 == DIGIT_LED_OFF) )
+ 632   1         
+ 633   1         
+ 634   1         
+ 635   1         
+ 636   1      
+ 637   1         // To measure how long does the program takes by observe the waveform of test LED in an oscillator
+ 638   1         // Results: It took about 40us, and therefore the duty cycle is about less than 1% by measured. Theorit
+             -ically, the duty cycle is 40us/5000us = 0.8%
+ 639   1              TestLedState = TEST_LED_OFF;
+ 640   1      }
+
+
+C51 COMPILER V7.06   PRESSING_BUTTONS_TO_SET_LED                                           09/18/2014 12:32:27 PAGE 12  
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    984    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     63    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
